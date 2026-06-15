@@ -1,0 +1,11 @@
+archive/
+models/
+tmp/
+public/outputs/
+__pycache__/
+*.pyc
+*.zip
+.env
+*.h5
+*.pt
+*.pth

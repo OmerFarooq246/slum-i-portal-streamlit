@@ -1,0 +1,11 @@
+rasterio
+streamlit
+geopandas
+pillow
+gdal
+--find-links=https://girder.github.io/large_image_wheels GDAL
+streamlit-folium
+folium
+leafmap
+numpy==1.26.4
+tensorflow
