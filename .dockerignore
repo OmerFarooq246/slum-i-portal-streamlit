@@ -1,0 +1,9 @@
+.git
+__pycache__/
+*.pyc
+archive/
+models/
+public/outputs/
+tmp/
+benchmarks/data/*
+benchmarks/results/*

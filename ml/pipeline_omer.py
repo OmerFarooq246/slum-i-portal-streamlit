@@ -1,6 +1,6 @@
 import os
+from typing import Any, Dict, List, Optional
 
-import leafmap
 import numpy as np
 import streamlit as st
 import tensorflow as tf
@@ -8,17 +8,21 @@ from PIL import Image
 
 from config.models import ModelConfig
 from ml.ENB5_Segmenter import EfficientNet_Segmenter_Config, EfficientNetB5_Segmenter
-from ml.images import create_overlay_image
-from pipeline.tiles import PolygonCoords, SpatialResult
-from utils.files import create_session_dir
+
+
+PolygonCoords = List[List[float]]
+SpatialResult = Dict[str, Any]
 
 
 @st.cache_resource
-def load_ENB5_Seg() -> EfficientNetB5_Segmenter:
+def load_ENB5_Seg(weights_path: Optional[str] = None) -> EfficientNetB5_Segmenter:
+    """Build one cached ENB5-Seg model, optionally loading its weights."""
     config = EfficientNet_Segmenter_Config()
     model = EfficientNetB5_Segmenter(config)
     dummy = tf.zeros((1, *config.input_shape))
     _ = model(dummy)
+    if weights_path is not None:
+        model.load_weights(weights_path)
     return model
 
 
@@ -28,6 +32,8 @@ def perform_segmentation(
     model: EfficientNetB5_Segmenter,
 ) -> None:
     try:
+        from utils.files import create_session_dir
+
         session_id, session_dir = create_session_dir()
         TILE_SIZE = 512
 
@@ -44,13 +50,13 @@ def perform_segmentation(
             tile_names = None
 
         model.load_weights(model_config.weights_path)
-        masks = _run_inference(model, tiles, model_config.batch_size)
+        masks = run_inference(model, tiles, model_config.batch_size)
 
-        mask_merged = _merge(masks, tile_names) if tile_names else masks[0]
+        mask_merged = merge_masks(masks, tile_names) if tile_names else masks[0]
 
         tf.keras.utils.save_img(mask_path, tf.expand_dims(mask_merged, axis=-1))
 
-        overlay = _overlay(img, mask_merged)
+        overlay = create_overlay_image(img, mask_merged)
 
         result: SpatialResult = {
             "session_id": session_id,
@@ -74,6 +80,8 @@ def perform_segmentation(
 
 
 def _download_raster(polygon_coords, session_dir):
+    import leafmap
+
     date_dir = os.path.join(session_dir, "analysis")
     os.makedirs(date_dir, exist_ok=True)
 
@@ -125,7 +133,8 @@ def _slice(raster, tile_size):
     return tiles, names
 
 
-def _run_inference(model, tiles, batch_size):
+def run_inference(model, tiles, batch_size):
+    """Run batched ENB5-Seg inference and return binary uint8 masks."""
     all_masks = []
     for i in range(0, len(tiles), batch_size):
         batch = np.stack(tiles[i:i + batch_size]).astype(np.float32) / 255.0
@@ -136,7 +145,8 @@ def _run_inference(model, tiles, batch_size):
     return all_masks
 
 
-def _merge(masks, tile_names):
+def merge_masks(masks, tile_names):
+    """Merge overlapping masks using tile names formatted as tile_X_Y."""
     coords = [tuple(map(int, n.split("_")[1:3])) for n in tile_names]
     full_w = max(x + m.shape[1] for m, (x, _) in zip(masks, coords))
     full_h = max(y + m.shape[0] for m, (_, y) in zip(masks, coords))
@@ -147,7 +157,8 @@ def _merge(masks, tile_names):
     return merged
 
 
-def _overlay(image, mask, color=(255, 0, 0), alpha=0.5):
+def create_overlay_image(image, mask, color=(255, 0, 0), alpha=0.5):
+    """Return an RGB array with the positive mask blended over the image."""
     if hasattr(image, "numpy"):
         image = image.numpy()
     image = image.astype(np.float32)

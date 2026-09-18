@@ -8,7 +8,7 @@ from PIL import Image
 
 from config.models import ModelConfig, get_available_models
 from config.settings import FIXED_ZOOM_LEVEL, PRESET_LOCATIONS, TILE_SIZE
-from pipeline_omer import load_ENB5_Seg, perform_segmentation
+from ml.pipeline_omer import load_ENB5_Seg, perform_segmentation
 from ui.map import create_interactive_map
 from ui.results import display_detection_results, display_results_summary
 from utils.state import init_session_state
