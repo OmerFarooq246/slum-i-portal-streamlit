@@ -1,17 +1,16 @@
 from dataclasses import dataclass
-from typing import Dict, List
 
 
 @dataclass(frozen=True)
 class ModelConfig:
     name: str
     api_model_name: str
-    regions: List[str]
+    regions: list[str]
     weights_path: str
     batch_size: int = 2
 
 
-MODEL_REGISTRY: Dict[str, ModelConfig] = {
+MODEL_REGISTRY: dict[str, ModelConfig] = {
     "enb5_lahore": ModelConfig(
         name="EfficientNet-B5 Segmentation",
         api_model_name="ENB5_Seg_PAK",
@@ -29,5 +28,5 @@ MODEL_REGISTRY: Dict[str, ModelConfig] = {
 }
 
 
-def get_available_models() -> Dict[str, ModelConfig]:
+def get_available_models() -> dict[str, ModelConfig]:
     return MODEL_REGISTRY

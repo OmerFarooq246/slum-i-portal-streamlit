@@ -9,7 +9,6 @@ For each deterministic, nested top-left crop it runs one unmeasured warm-up foll
 The repository does not include the required binary inputs. Supply:
 
 - `models/enb5_seg_lahore.h5` (or `models/enb5_seg_islamabad.h5`): trained ENB5-Seg weights passed to `--weights`.
-- `models/efficientnetb5_notop.h5`: the ImageNet EfficientNet-B5 encoder weights expected by Keras during model construction.
 - `benchmarks/data/source.tif`: a local raster with at least three useful image bands and dimensions of at least 3072×3072 pixels. Larger rasters are deterministically cropped from pixel offset `(0, 0)` by default.
 
 Record the provenance/licensing of the source raster separately. The benchmark records SHA-256 hashes of both supplied benchmark inputs in `metadata.json`.
@@ -38,19 +37,19 @@ docker run --rm \
   --memory-swap 4g \
   --network none \
   --env CUDA_VISIBLE_DEVICES=-1 \
-  --mount type=bind,src="$(pwd)/models",dst=/root/.keras/models,readonly \
+  --mount type=bind,src="$(pwd)/models",dst=/models,readonly \
   --mount type=bind,src="$(pwd)/benchmarks/data",dst=/data,readonly \
   --mount type=bind,src="$(pwd)/benchmarks/results",dst=/results \
   slum-i-enb5-benchmark:arm64 \
   --raster /data/source.tif \
-  --weights /root/.keras/models/enb5_seg_lahore.h5 \
+  --weights /models/enb5_seg_lahore.h5 \
   --results-dir /results \
   --batch-size 1 \
   --cpu-limit 2 \
   --ram-limit-gb 4
 ```
 
-Keras finds `efficientnetb5_notop.h5` in `/root/.keras/models` without downloading it. Because the run uses `--network none`, a missing encoder file fails instead of silently adding network time. Do not add `--platform linux/amd64`; that would invoke emulation and invalidate this protocol.
+The benchmark constructs the architecture without downloading ImageNet weights, then loads the supplied trained segmentation weights from `/models`. The container therefore remains fully offline at runtime. Do not add `--platform linux/amd64`; that would invoke emulation and invalidate this protocol.
 
 To use a different deterministic crop origin, pass both `--crop-x N --crop-y N`. Keep those values fixed across compared runs.
 

@@ -1,6 +1,12 @@
 .git
 __pycache__/
 *.pyc
+.venv/
+.conda/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
 archive/
 models/
 public/outputs/

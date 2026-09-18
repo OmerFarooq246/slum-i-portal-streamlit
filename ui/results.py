@@ -4,7 +4,7 @@ import io
 import os
 import shutil
 import zipfile
-from typing import Any, Dict
+from typing import Any
 
 import streamlit as st
 
@@ -13,7 +13,7 @@ def display_results_summary() -> None:
     for session_id, result in list(st.session_state.processing_results.items()):
         st.markdown(f"**Analysis · {session_id[:8]}**")
         if "primary_result" in result:
-            tiles = result['primary_result'].get('tiles_info')
+            tiles = result["primary_result"].get("tiles_info")
             if tiles is not None:
                 st.caption(f"{len(tiles)} tiles processed")
 
@@ -35,14 +35,14 @@ def display_results_summary() -> None:
 
 
 def display_detection_results() -> None:
-    for session_id, result in st.session_state.processing_results.items():
+    for result in st.session_state.processing_results.values():
         if "primary_result" in result:
             _display_date_result(result["primary_result"])
         else:
             st.warning("No results available.")
 
 
-def _display_date_result(date_result: Dict[str, Any]) -> None:
+def _display_date_result(date_result: dict[str, Any]) -> None:
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -61,7 +61,7 @@ def _display_date_result(date_result: Dict[str, Any]) -> None:
             st.image(date_result["overlay_image"], use_container_width=True)
 
 
-def _build_zip(session_id: str, result: Dict[str, Any]) -> bytes:
+def _build_zip(session_id: str, result: dict[str, Any]) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         pr = result.get("primary_result", {})
@@ -78,7 +78,7 @@ def _build_zip(session_id: str, result: Dict[str, Any]) -> bytes:
     return buf.getvalue()
 
 
-def _cleanup_session(session_id: str, result: Dict[str, Any]) -> None:
+def _cleanup_session(session_id: str, result: dict[str, Any]) -> None:
     try:
         session_dir = result.get("session_dir")
         if session_dir and os.path.exists(session_dir):

@@ -4,6 +4,13 @@ tmp/
 public/outputs/
 __pycache__/
 *.pyc
+.venv/
+.coverage
+coverage.xml
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
 *.zip
 .env
 *.h5

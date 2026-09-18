@@ -13,21 +13,22 @@ import statistics
 import sys
 import threading
 import time
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import psutil
 import rasterio
 import tensorflow as tf
+from numpy.typing import NDArray
 from PIL import Image
 from rasterio.windows import Window
 
+from config.settings import TILE_SIZE
 from ml.pipeline_omer import create_overlay_image, load_ENB5_Seg, run_inference
 
-
-TILE_SIZE = 512
-ROI_SPECS: Sequence[Tuple[str, int]] = (
+ROI_SPECS: Sequence[tuple[str, int]] = (
     ("small", 2),
     ("medium", 4),
     ("large", 6),
@@ -41,6 +42,7 @@ TIMING_METRICS = (
     "total_latency_s",
 )
 OTHER_METRICS = ("tiles_per_second", "peak_process_memory_mb")
+ImageArray = NDArray[np.uint8]
 
 
 class PeakMemorySampler:
@@ -93,7 +95,9 @@ def validate_inputs(args: argparse.Namespace) -> None:
     if not args.weights.is_file():
         raise FileNotFoundError(f"ENB5-Seg weights not found: {args.weights}")
     if args.batch_size < 1 or args.warmup_runs != 1 or args.measured_runs != 5:
-        raise ValueError("Controlled protocol requires batch size >= 1, exactly 1 warm-up, and exactly 5 measured runs")
+        raise ValueError(
+            "Controlled protocol requires batch size >= 1, exactly 1 warm-up, and exactly 5 measured runs"
+        )
     required_extent = max(grid for _, grid in ROI_SPECS) * TILE_SIZE
     with rasterio.open(args.raster) as src:
         if src.count < 1:
@@ -115,13 +119,15 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def detected_cgroup_limits() -> Dict[str, Any]:
-    detected: Dict[str, Any] = {}
+def detected_cgroup_limits() -> dict[str, Any]:
+    detected: dict[str, Any] = {}
     cpu_max = Path("/sys/fs/cgroup/cpu.max")
     memory_max = Path("/sys/fs/cgroup/memory.max")
     if cpu_max.is_file():
         quota, period = cpu_max.read_text().strip().split()
-        detected["detected_cpu_limit"] = "unlimited" if quota == "max" else float(quota) / float(period)
+        detected["detected_cpu_limit"] = (
+            "unlimited" if quota == "max" else float(quota) / float(period)
+        )
     if memory_max.is_file():
         value = memory_max.read_text().strip()
         detected["detected_ram_limit_bytes"] = "unlimited" if value == "max" else int(value)
@@ -131,7 +137,7 @@ def detected_cgroup_limits() -> Dict[str, Any]:
     return detected
 
 
-def load_raster_roi(raster_path: Path, crop_x: int, crop_y: int, pixels: int) -> np.ndarray:
+def load_raster_roi(raster_path: Path, crop_x: int, crop_y: int, pixels: int) -> ImageArray:
     with rasterio.open(raster_path) as src:
         bands = list(range(1, min(src.count, 3) + 1))
         data = src.read(bands, window=Window(crop_x, crop_y, pixels, pixels))
@@ -142,9 +148,9 @@ def load_raster_roi(raster_path: Path, crop_x: int, crop_y: int, pixels: int) ->
     return np.transpose(data[:3], (1, 2, 0)).astype(np.uint8)
 
 
-def tile_roi(image: np.ndarray, tile_dir: Path, grid_size: int) -> List[Tuple[Path, int, int]]:
+def tile_roi(image: ImageArray, tile_dir: Path, grid_size: int) -> list[tuple[Path, int, int]]:
     tile_dir.mkdir(parents=True, exist_ok=True)
-    tiles: List[Tuple[Path, int, int]] = []
+    tiles: list[tuple[Path, int, int]] = []
     for row in range(grid_size):
         for col in range(grid_size):
             top = row * TILE_SIZE
@@ -156,7 +162,9 @@ def tile_roi(image: np.ndarray, tile_dir: Path, grid_size: int) -> List[Tuple[Pa
     return tiles
 
 
-def infer_tiles(model: tf.keras.Model, tiles: Sequence[Tuple[Path, int, int]], batch_size: int) -> List[np.ndarray]:
+def infer_tiles(
+    model: tf.keras.Model, tiles: Sequence[tuple[Path, int, int]], batch_size: int
+) -> list[ImageArray]:
     tile_arrays = []
     for tile_path, _, _ in tiles:
         encoded = tf.io.read_file(str(tile_path))
@@ -165,7 +173,7 @@ def infer_tiles(model: tf.keras.Model, tiles: Sequence[Tuple[Path, int, int]], b
     return run_inference(model, tile_arrays, batch_size)
 
 
-def stitch_masks(masks: Sequence[np.ndarray], grid_size: int) -> Image.Image:
+def stitch_masks(masks: Sequence[ImageArray], grid_size: int) -> Image.Image:
     stitched = np.zeros((grid_size * TILE_SIZE, grid_size * TILE_SIZE), dtype=np.uint8)
     for index, mask in enumerate(masks):
         row, col = divmod(index, grid_size)
@@ -178,7 +186,7 @@ def stitch_masks(masks: Sequence[np.ndarray], grid_size: int) -> Image.Image:
     return Image.fromarray(stitched)
 
 
-def generate_outputs(image: np.ndarray, mask: Image.Image, output_dir: Path) -> None:
+def generate_outputs(image: ImageArray, mask: Image.Image, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     overlay = Image.fromarray(create_overlay_image(image, np.asarray(mask)))
     mask.save(output_dir / "mask.png", format="PNG")
@@ -194,7 +202,7 @@ def run_pipeline(
     crop_y: int,
     batch_size: int,
     work_dir: Path,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     sampler = PeakMemorySampler()
     sampler.start()
     total_start = time.perf_counter()
@@ -235,18 +243,18 @@ def run_pipeline(
     }
 
 
-def write_csv(path: Path, rows: Sequence[Dict[str, Any]], fieldnames: Iterable[str]) -> None:
+def write_csv(path: Path, rows: Sequence[dict[str, Any]], fieldnames: Iterable[str]) -> None:
     with path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(fieldnames))
         writer.writeheader()
         writer.writerows(rows)
 
 
-def summarize(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    summary: List[Dict[str, Any]] = []
+def summarize(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    summary: list[dict[str, Any]] = []
     for roi_name, grid_size in ROI_SPECS:
         roi_rows = [row for row in rows if row["roi"] == roi_name]
-        item: Dict[str, Any] = {
+        item: dict[str, Any] = {
             "roi": roi_name,
             "width_px": grid_size * TILE_SIZE,
             "height_px": grid_size * TILE_SIZE,
@@ -261,17 +269,30 @@ def summarize(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return summary
 
 
-def write_paper_table(path: Path, summary: Sequence[Dict[str, Any]]) -> None:
+def write_paper_table(path: Path, summary: Sequence[dict[str, Any]]) -> None:
     headers = (
-        "ROI", "Tiles", "Load/preprocess (s)", "Tiling (s)", "Inference (s)",
-        "Stitch (s)", "Output (s)", "Total (s)", "Tiles/s", "Peak RSS (MB)",
+        "ROI",
+        "Tiles",
+        "Load/preprocess (s)",
+        "Tiling (s)",
+        "Inference (s)",
+        "Stitch (s)",
+        "Output (s)",
+        "Total (s)",
+        "Tiles/s",
+        "Peak RSS (MB)",
     )
     lines = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
-    metric_order = (*TIMING_METRICS[:-1], "total_latency_s", "tiles_per_second", "peak_process_memory_mb")
+    metric_order = (
+        *TIMING_METRICS[:-1],
+        "total_latency_s",
+        "tiles_per_second",
+        "peak_process_memory_mb",
+    )
     for row in summary:
         values = [str(row["roi"]).title(), str(row["tile_count"])]
         values.extend(
-            f'{row[f"{metric}_median"]:.3f} ± {row[f"{metric}_stddev"]:.3f}'
+            f"{row[f'{metric}_median']:.3f} ± {row[f'{metric}_stddev']:.3f}"
             for metric in metric_order
         )
         lines.append("| " + " | ".join(values) + " |")
@@ -287,7 +308,7 @@ def main() -> int:
     tf.config.threading.set_intra_op_parallelism_threads(max(1, int(args.cpu_limit)))
     tf.config.threading.set_inter_op_parallelism_threads(1)
 
-    metadata: Dict[str, Any] = {
+    metadata: dict[str, Any] = {
         "protocol": "ENB5-Seg local-raster system benchmark",
         "cpu_limit": args.cpu_limit,
         "ram_limit_gb": args.ram_limit_gb,
@@ -316,34 +337,48 @@ def main() -> int:
     # weights_path; the same resident object is reused for every warm-up/measured run.
     model = load_ENB5_Seg(str(args.weights))
 
-    raw_rows: List[Dict[str, Any]] = []
+    raw_rows: list[dict[str, Any]] = []
     for roi_name, grid_size in ROI_SPECS:
         print(f"Warm-up: {roi_name} ({grid_size * grid_size} tiles)", flush=True)
         run_pipeline(
-            args.raster, model, roi_name, grid_size, args.crop_x, args.crop_y,
-            args.batch_size, work_dir,
+            args.raster,
+            model,
+            roi_name,
+            grid_size,
+            args.crop_x,
+            args.crop_y,
+            args.batch_size,
+            work_dir,
         )
         for run_number in range(1, args.measured_runs + 1):
             print(f"Measured run {run_number}/{args.measured_runs}: {roi_name}", flush=True)
             metrics = run_pipeline(
-                args.raster, model, roi_name, grid_size, args.crop_x, args.crop_y,
-                args.batch_size, work_dir,
+                args.raster,
+                model,
+                roi_name,
+                grid_size,
+                args.crop_x,
+                args.crop_y,
+                args.batch_size,
+                work_dir,
             )
-            raw_rows.append({
-                "roi": roi_name,
-                "run": run_number,
-                "width_px": grid_size * TILE_SIZE,
-                "height_px": grid_size * TILE_SIZE,
-                "tile_count": grid_size * grid_size,
-                "tile_size": TILE_SIZE,
-                "batch_size": args.batch_size,
-                "cpu_limit": args.cpu_limit,
-                "ram_limit_gb": args.ram_limit_gb,
-                "architecture": platform.machine(),
-                "tensorflow_version": tf.__version__,
-                "python_version": platform.python_version(),
-                **metrics,
-            })
+            raw_rows.append(
+                {
+                    "roi": roi_name,
+                    "run": run_number,
+                    "width_px": grid_size * TILE_SIZE,
+                    "height_px": grid_size * TILE_SIZE,
+                    "tile_count": grid_size * grid_size,
+                    "tile_size": TILE_SIZE,
+                    "batch_size": args.batch_size,
+                    "cpu_limit": args.cpu_limit,
+                    "ram_limit_gb": args.ram_limit_gb,
+                    "architecture": platform.machine(),
+                    "tensorflow_version": tf.__version__,
+                    "python_version": platform.python_version(),
+                    **metrics,
+                }
+            )
 
     raw_fields = list(raw_rows[0].keys())
     write_csv(args.results_dir / "raw_runs.csv", raw_rows, raw_fields)
@@ -359,4 +394,4 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except (FileNotFoundError, ValueError) as exc:
         print(f"Benchmark preflight failed: {exc}", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from exc
