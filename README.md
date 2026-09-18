@@ -33,6 +33,8 @@ Model weights (`.h5`) are not included in the repo. Place them in `models/` befo
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch, pull request, merge, text, and code review guidelines.
+
 Install the managed Git hooks once, then use the Make targets for local checks:
 
 ```bash
@@ -55,3 +57,9 @@ make check
 Runtime and development dependencies are declared in `environment.yml`. Tool configuration remains in `pyproject.toml`. The benchmark container uses the smaller `benchmarks/environment.yml` environment.
 
 The installed pre-push hook rejects direct pushes to `main`. Both pre-commit and pre-push reject em dashes in tracked text files.
+
+## License
+
+The source code and documentation in this repository are licensed under the
+[Apache License 2.0](LICENSE). Model weights, datasets, satellite imagery, map tiles, and other
+third-party assets are subject to their respective licenses and terms.

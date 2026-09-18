@@ -8,8 +8,8 @@ For each deterministic, nested top-left crop it runs one unmeasured warm-up foll
 
 The repository does not include the required binary inputs. Supply:
 
-- `models/enb5_seg_lahore.h5` (or `models/enb5_seg_islamabad.h5`): trained ENB5-Seg weights passed to `--weights`.
-- `benchmarks/data/source.tif`: a local raster with at least three useful image bands and dimensions of at least 3072×3072 pixels. Larger rasters are deterministically cropped from pixel offset `(0, 0)` by default.
+- `models/enb5_seg_islamabad.h5`: the trained ENB5-Seg weights.
+- `benchmarks/data/raster_benchmark.tif`: a local raster with at least three useful image bands and dimensions of at least 3072×3072 pixels. Larger rasters are deterministically cropped from pixel offset `(0, 0)` by default.
 
 Record the provenance/licensing of the source raster separately. The benchmark records SHA-256 hashes of both supplied benchmark inputs in `metadata.json`.
 
@@ -37,19 +37,15 @@ docker run --rm \
   --memory-swap 4g \
   --network none \
   --env CUDA_VISIBLE_DEVICES=-1 \
-  --mount type=bind,src="$(pwd)/models",dst=/models,readonly \
-  --mount type=bind,src="$(pwd)/benchmarks/data",dst=/data,readonly \
-  --mount type=bind,src="$(pwd)/benchmarks/results",dst=/results \
+  --mount type=bind,src="$(pwd)/models",dst=/app/models,readonly \
+  --mount type=bind,src="$(pwd)/benchmarks/data",dst=/app/benchmarks/data,readonly \
+  --mount type=bind,src="$(pwd)/benchmarks/results",dst=/app/benchmarks/results \
   slum-i-enb5-benchmark:arm64 \
-  --raster /data/source.tif \
-  --weights /models/enb5_seg_lahore.h5 \
-  --results-dir /results \
   --batch-size 1 \
-  --cpu-limit 2 \
-  --ram-limit-gb 4
+  --cpu-limit 2
 ```
 
-The benchmark constructs the architecture without downloading ImageNet weights, then loads the supplied trained segmentation weights from `/models`. The container therefore remains fully offline at runtime. Do not add `--platform linux/amd64`; that would invoke emulation and invalidate this protocol.
+The raster, weights, and results paths are fixed in the runner. The benchmark constructs the architecture without downloading ImageNet weights, then loads the trained segmentation weights from `/app/models`. The container therefore remains fully offline at runtime. Do not add `--platform linux/amd64`; that would invoke emulation and invalidate this protocol.
 
 To use a different deterministic crop origin, pass both `--crop-x N --crop-y N`. Keep those values fixed across compared runs.
 
@@ -62,5 +58,7 @@ The runner writes:
 - `paper_table.md`: concise median ± SD table.
 - `metadata.json`: limits, detected cgroup settings, platform/architecture, versions, input hashes, tile/batch configuration, and tile counts.
 - `artifacts/`: latest tile, mask, and overlay outputs for inspection (overwritten on each run).
+
+All latency fields in `raw_runs.csv`, `summary.csv`, and `paper_table.md` are reported in milliseconds (`*_ms`). Throughput remains reported as tiles per second.
 
 Peak memory is sampled process RSS every 10 ms across the complete per-ROI pipeline. Total latency starts before local raster reading and ends after mask and overlay PNGs are written. It excludes model initialization, the unmeasured warm-up, result CSV aggregation, and all imagery acquisition.

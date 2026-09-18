@@ -119,7 +119,7 @@ Removing a result deletes its temporary session directory. **Clear all** deletes
 
 ## Benchmark
 
-`benchmarks/run_enb5_system_benchmark.py` operates on a supplied local raster and weights file. It does not download imagery. It uses `ml.pipeline_omer` for model loading, inference, and overlays while retaining benchmark-specific raster cropping, tile-file generation, timing, memory sampling, result aggregation, and output writing.
+`benchmarks/run_enb5_system_benchmark.py` uses the fixed inputs `benchmarks/data/raster_benchmark.tif` and `models/enb5_seg_islamabad.h5`, and always writes to `benchmarks/results`. It does not download imagery. It uses `ml.pipeline_omer` for model loading, inference, and overlays while retaining benchmark-specific raster cropping, tile-file generation, timing, memory sampling, result aggregation, and output writing.
 
 The fixed benchmark protocol uses:
 

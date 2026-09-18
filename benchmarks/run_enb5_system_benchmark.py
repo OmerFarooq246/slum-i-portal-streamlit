@@ -28,18 +28,22 @@ from rasterio.windows import Window
 from config.settings import TILE_SIZE
 from ml.pipeline_omer import create_overlay_image, load_ENB5_Seg, run_inference
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RASTER_PATH = PROJECT_ROOT / "benchmarks/data/raster_benchmark.tif"
+WEIGHTS_PATH = PROJECT_ROOT / "models/enb5_seg_islamabad.h5"
+RESULTS_DIR = PROJECT_ROOT / "benchmarks/results"
 ROI_SPECS: Sequence[tuple[str, int]] = (
     ("small", 2),
     ("medium", 4),
     ("large", 6),
 )
 TIMING_METRICS = (
-    "raster_load_preprocess_s",
-    "tiling_s",
-    "inference_s",
-    "stitching_s",
-    "output_generation_s",
-    "total_latency_s",
+    "raster_load_preprocess_ms",
+    "tiling_ms",
+    "inference_ms",
+    "stitching_ms",
+    "output_generation_ms",
+    "total_latency_ms",
 )
 OTHER_METRICS = ("tiles_per_second", "peak_process_memory_mb")
 ImageArray = NDArray[np.uint8]
@@ -76,30 +80,26 @@ class PeakMemorySampler:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--raster", required=True, type=Path, help="Local source GeoTIFF/raster")
-    parser.add_argument("--weights", required=True, type=Path, help="ENB5-Seg .h5 weights")
-    parser.add_argument("--results-dir", type=Path, default=Path("benchmarks/results"))
     parser.add_argument("--crop-x", type=int, default=0, help="Deterministic left pixel offset")
     parser.add_argument("--crop-y", type=int, default=0, help="Deterministic top pixel offset")
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--warmup-runs", type=int, default=1)
     parser.add_argument("--measured-runs", type=int, default=5)
     parser.add_argument("--cpu-limit", type=float, default=2.0)
-    parser.add_argument("--ram-limit-gb", type=float, default=4.0)
     return parser.parse_args()
 
 
 def validate_inputs(args: argparse.Namespace) -> None:
-    if not args.raster.is_file():
-        raise FileNotFoundError(f"Source raster not found: {args.raster}")
-    if not args.weights.is_file():
-        raise FileNotFoundError(f"ENB5-Seg weights not found: {args.weights}")
+    if not RASTER_PATH.is_file():
+        raise FileNotFoundError(f"Source raster not found: {RASTER_PATH}")
+    if not WEIGHTS_PATH.is_file():
+        raise FileNotFoundError(f"ENB5-Seg weights not found: {WEIGHTS_PATH}")
     if args.batch_size < 1 or args.warmup_runs != 1 or args.measured_runs != 5:
         raise ValueError(
             "Controlled protocol requires batch size >= 1, exactly 1 warm-up, and exactly 5 measured runs"
         )
     required_extent = max(grid for _, grid in ROI_SPECS) * TILE_SIZE
-    with rasterio.open(args.raster) as src:
+    with rasterio.open(RASTER_PATH) as src:
         if src.count < 1:
             raise ValueError("Source raster has no bands")
         if args.crop_x < 0 or args.crop_y < 0:
@@ -232,12 +232,12 @@ def run_pipeline(
     peak_memory = sampler.stop()
     tile_count = grid_size * grid_size
     return {
-        "raster_load_preprocess_s": raster_latency,
-        "tiling_s": tiling_latency,
-        "inference_s": inference_latency,
-        "stitching_s": stitching_latency,
-        "output_generation_s": output_latency,
-        "total_latency_s": total_latency,
+        "raster_load_preprocess_ms": raster_latency * 1_000,
+        "tiling_ms": tiling_latency * 1_000,
+        "inference_ms": inference_latency * 1_000,
+        "stitching_ms": stitching_latency * 1_000,
+        "output_generation_ms": output_latency * 1_000,
+        "total_latency_ms": total_latency * 1_000,
         "tiles_per_second": tile_count / inference_latency,
         "peak_process_memory_mb": peak_memory,
     }
@@ -273,19 +273,19 @@ def write_paper_table(path: Path, summary: Sequence[dict[str, Any]]) -> None:
     headers = (
         "ROI",
         "Tiles",
-        "Load/preprocess (s)",
-        "Tiling (s)",
-        "Inference (s)",
-        "Stitch (s)",
-        "Output (s)",
-        "Total (s)",
+        "Load/preprocess (ms)",
+        "Tiling (ms)",
+        "Inference (ms)",
+        "Stitch (ms)",
+        "Output (ms)",
+        "Total (ms)",
         "Tiles/s",
         "Peak RSS (MB)",
     )
     lines = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
     metric_order = (
         *TIMING_METRICS[:-1],
-        "total_latency_s",
+        "total_latency_ms",
         "tiles_per_second",
         "peak_process_memory_mb",
     )
@@ -302,8 +302,8 @@ def write_paper_table(path: Path, summary: Sequence[dict[str, Any]]) -> None:
 def main() -> int:
     args = parse_args()
     validate_inputs(args)
-    args.results_dir.mkdir(parents=True, exist_ok=True)
-    work_dir = args.results_dir / "artifacts"
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    work_dir = RESULTS_DIR / "artifacts"
 
     tf.config.threading.set_intra_op_parallelism_threads(max(1, int(args.cpu_limit)))
     tf.config.threading.set_inter_op_parallelism_threads(1)
@@ -311,7 +311,6 @@ def main() -> int:
     metadata: dict[str, Any] = {
         "protocol": "ENB5-Seg local-raster system benchmark",
         "cpu_limit": args.cpu_limit,
-        "ram_limit_gb": args.ram_limit_gb,
         "platform": platform.platform(),
         "architecture": platform.machine(),
         "python_version": platform.python_version(),
@@ -322,26 +321,26 @@ def main() -> int:
         "measured_runs_per_roi": args.measured_runs,
         "crop_x": args.crop_x,
         "crop_y": args.crop_y,
-        "source_raster": str(args.raster.resolve()),
-        "source_raster_sha256": file_sha256(args.raster),
-        "weights_path": str(args.weights.resolve()),
-        "weights_sha256": file_sha256(args.weights),
+        "source_raster": str(RASTER_PATH),
+        "source_raster_sha256": file_sha256(RASTER_PATH),
+        "weights_path": str(WEIGHTS_PATH),
+        "weights_sha256": file_sha256(WEIGHTS_PATH),
         "tiles_per_roi": {name: grid * grid for name, grid in ROI_SPECS},
         "model_initialization_timed": False,
         "imagery_acquisition_timed": False,
     }
     metadata.update(detected_cgroup_limits())
-    (args.results_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    (RESULTS_DIR / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
     # This call initializes and loads weights once. Streamlit caches separately by
     # weights_path; the same resident object is reused for every warm-up/measured run.
-    model = load_ENB5_Seg(str(args.weights))
+    model = load_ENB5_Seg(str(WEIGHTS_PATH))
 
     raw_rows: list[dict[str, Any]] = []
     for roi_name, grid_size in ROI_SPECS:
         print(f"Warm-up: {roi_name} ({grid_size * grid_size} tiles)", flush=True)
         run_pipeline(
-            args.raster,
+            RASTER_PATH,
             model,
             roi_name,
             grid_size,
@@ -353,7 +352,7 @@ def main() -> int:
         for run_number in range(1, args.measured_runs + 1):
             print(f"Measured run {run_number}/{args.measured_runs}: {roi_name}", flush=True)
             metrics = run_pipeline(
-                args.raster,
+                RASTER_PATH,
                 model,
                 roi_name,
                 grid_size,
@@ -372,7 +371,6 @@ def main() -> int:
                     "tile_size": TILE_SIZE,
                     "batch_size": args.batch_size,
                     "cpu_limit": args.cpu_limit,
-                    "ram_limit_gb": args.ram_limit_gb,
                     "architecture": platform.machine(),
                     "tensorflow_version": tf.__version__,
                     "python_version": platform.python_version(),
@@ -381,11 +379,11 @@ def main() -> int:
             )
 
     raw_fields = list(raw_rows[0].keys())
-    write_csv(args.results_dir / "raw_runs.csv", raw_rows, raw_fields)
+    write_csv(RESULTS_DIR / "raw_runs.csv", raw_rows, raw_fields)
     summary_rows = summarize(raw_rows)
-    write_csv(args.results_dir / "summary.csv", summary_rows, summary_rows[0].keys())
-    write_paper_table(args.results_dir / "paper_table.md", summary_rows)
-    print(f"Results written to {args.results_dir}", flush=True)
+    write_csv(RESULTS_DIR / "summary.csv", summary_rows, summary_rows[0].keys())
+    write_paper_table(RESULTS_DIR / "paper_table.md", summary_rows)
+    print(f"Results written to {RESULTS_DIR}", flush=True)
     return 0
 
 
