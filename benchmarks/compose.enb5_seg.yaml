@@ -1,0 +1,17 @@
+name: slum-i-enb5-seg-benchmark
+
+services:
+  benchmark:
+    image: slum-i-segmentation-benchmark:arm64
+    build:
+      context: ..
+      dockerfile: benchmarks/Dockerfile
+    platform: linux/arm64
+    cpus: 2.0
+    mem_limit: 4g
+    memswap_limit: 4g
+    network_mode: none
+    volumes:
+      - ../models:/app/models:ro
+      - ./data:/app/benchmarks/data:ro
+      - ./results:/app/benchmarks/results

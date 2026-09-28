@@ -9,8 +9,6 @@ dependencies:
   - pip
   - psutil=6.0.0
   - rasterio=1.4.4
-  - streamlit>=1.54,<2
   - pip:
       - numpy==1.26.4
-      - pyarrow==23.0.0
       - tensorflow==2.20.0

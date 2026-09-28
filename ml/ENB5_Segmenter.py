@@ -67,7 +67,7 @@ class Encoder(keras.layers.Layer):
         super().__init__(**kwargs)
         base_model = tf.keras.applications.EfficientNetB5(
             include_top=False,
-            weights="imagenet",
+            weights=None,
             input_shape=input_shape,
         )
         self.encoder_layers = [

@@ -1,64 +1,36 @@
-# ENB5-Seg system-performance benchmark
+# Segmentation benchmark
 
-This benchmark measures the portal's ENB5-Seg path from an already-downloaded local raster. Model loading, batched inference, and overlay generation use the same `ml/pipeline_omer.py` helpers as the Streamlit app. It performs no imagery acquisition and does not import or call `leafmap.map_tiles_to_geotiff()`.
+This benchmark measures the portal's local-raster segmentation path without imagery acquisition or Streamlit rendering. The portal and benchmark use the same in-memory operations from `ml/segmentation_core.py`.
 
-For each deterministic, nested top-left crop it runs one unmeasured warm-up followed by five measured runs. Model construction and weight loading happen once before the warm-ups; the initialized model remains resident. The three crops are exactly 1024×1024 (4 tiles), 2048×2048 (16 tiles), and 3072×3072 (36 tiles), using 512×512 tiles.
+## Inputs
 
-## Required local files
+Provide the model checkpoint registered by the selected `MODEL_ADAPTERS` entry in `run_enb5_system_benchmark.py`. Provide the local benchmark raster described in `data/README.md`. These binary inputs are intentionally excluded from Git.
 
-The repository does not include the required binary inputs. Supply:
+## Build and run
 
-- `models/enb5_seg_islamabad.h5`: the trained ENB5-Seg weights.
-- `benchmarks/data/raster_benchmark.tif`: a local raster with at least three useful image bands and dimensions of at least 3072×3072 pixels. Larger rasters are deterministically cropped from pixel offset `(0, 0)` by default.
+The Compose files contain the build context, platform, resource limits, network policy, mounts, and benchmark arguments. Run from the repository root on Apple Silicon.
 
-Record the provenance/licensing of the source raster separately. The benchmark records SHA-256 hashes of both supplied benchmark inputs in `metadata.json`.
-
-## Build and run on Apple Silicon
-
-Run these commands from the repository root. They explicitly build and run Linux ARM64, constrain the container to 2 CPUs and 4 GB RAM, disable GPU visibility, and disable runtime networking:
+ENB5-Seg:
 
 ```bash
-test "$(uname -m)" = "arm64"
-test "$(docker info --format '{{.Architecture}}')" = "aarch64"
-
-mkdir -p benchmarks/results
-
-docker buildx build \
-  --platform linux/arm64 \
-  --load \
-  -f benchmarks/Dockerfile \
-  -t slum-i-enb5-benchmark:arm64 \
-  .
-
-docker run --rm \
-  --platform linux/arm64 \
-  --cpus 2 \
-  --memory 4g \
-  --memory-swap 4g \
-  --network none \
-  --env CUDA_VISIBLE_DEVICES=-1 \
-  --mount type=bind,src="$(pwd)/models",dst=/app/models,readonly \
-  --mount type=bind,src="$(pwd)/benchmarks/data",dst=/app/benchmarks/data,readonly \
-  --mount type=bind,src="$(pwd)/benchmarks/results",dst=/app/benchmarks/results \
-  slum-i-enb5-benchmark:arm64 \
-  --batch-size 1 \
-  --cpu-limit 2
+docker compose -f benchmarks/compose.enb5_seg.yaml build
+docker compose -f benchmarks/compose.enb5_seg.yaml run --rm benchmark
 ```
 
-The raster, weights, and results paths are fixed in the runner. The benchmark constructs the architecture without downloading ImageNet weights, then loads the trained segmentation weights from `/app/models`. The container therefore remains fully offline at runtime. Do not add `--platform linux/amd64`; that would invoke emulation and invalidate this protocol.
+SegFormer, after its adapter, dependencies, and checkpoint are added:
 
-To use a different deterministic crop origin, pass both `--crop-x N --crop-y N`. Keep those values fixed across compared runs.
+```bash
+docker compose -f benchmarks/compose.segformer.yaml build
+docker compose -f benchmarks/compose.segformer.yaml run --rm benchmark
+```
 
-## Results
+The ENB5-Seg configuration inherits the image's `CMD`. The SegFormer configuration replaces it with SegFormer arguments. Do not run the ARM64 protocol through AMD64 emulation.
 
-The runner writes:
+## Sources of truth
 
-- `raw_runs.csv`: all 15 measured runs and every requested stage metric.
-- `summary.csv`: median and sample standard deviation for each metric by ROI.
-- `paper_table.md`: concise median ± SD table.
-- `metadata.json`: limits, detected cgroup settings, platform/architecture, versions, input hashes, tile/batch configuration, and tile counts.
-- `artifacts/`: latest tile, mask, and overlay outputs for inspection (overwritten on each run).
-
-All latency fields in `raw_runs.csv`, `summary.csv`, and `paper_table.md` are reported in milliseconds (`*_ms`). Throughput remains reported as tiles per second.
-
-Peak memory is sampled process RSS every 10 ms across the complete per-ROI pipeline. Total latency starts before local raster reading and ends after mask and overlay PNGs are written. It excludes model initialization, the unmeasured warm-up, result CSV aggregation, and all imagery acquisition.
+- Protocol, model adapters, metrics, and result files: `run_enb5_system_benchmark.py`
+- Container entry point, defaults, and build smoke test: `Dockerfile`
+- Per-model runtime configuration: `compose.enb5_seg.yaml`, `compose.segformer.yaml`
+- Container dependencies: `environment.yml`
+- Raster requirements: `data/README.md`
+- Shared portal and benchmark operations: `../ml/segmentation_core.py`
