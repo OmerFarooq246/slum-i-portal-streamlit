@@ -21,5 +21,5 @@ dependencies:
       # Use wheels for TensorFlow and PyArrow together. The conda-forge
       # PyArrow native libraries conflict with TensorFlow on Apple Silicon.
       - numpy==1.26.4
-      - pyarrow==23.0.0
+      - pyarrow==23.0.1
       - tensorflow==2.20.0
