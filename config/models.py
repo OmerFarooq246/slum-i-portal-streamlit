@@ -16,14 +16,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         api_model_name="ENB5_Seg_PAK",
         regions=["Lahore"],
         weights_path="models/enb5_seg_lahore.h5",
-        batch_size=4,
     ),
     "enb5_islamabad": ModelConfig(
         name="EfficientNet-B5 Segmentation",
         api_model_name="ENB5_Seg_PAK",
         regions=["Islamabad"],
         weights_path="models/enb5_seg_islamabad.h5",
-        batch_size=4,
     ),
 }
 

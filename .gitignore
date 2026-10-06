@@ -16,3 +16,4 @@ coverage.xml
 *.h5
 *.pt
 *.pth
+benchmarks/data/raster_benchmark.tif

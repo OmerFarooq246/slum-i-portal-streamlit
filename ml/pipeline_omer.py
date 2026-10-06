@@ -1,10 +1,10 @@
-import os
+from pathlib import Path
 from typing import Any
 
 import leafmap
 import numpy as np
 import streamlit as st
-import tensorflow as tf
+from numpy.typing import NDArray
 from PIL import Image
 
 from config.models import ModelConfig
@@ -38,24 +38,13 @@ def perform_segmentation(
     try:
         session_id, session_dir = create_session_dir()
 
-        raster_np, date_dir, bbox = _download_raster(polygon_coords, session_dir)
-        img_path = os.path.join(date_dir, "raster.png")
-        mask_path = os.path.join(date_dir, "mask.png")
+        raster_np, bbox = _download_raster(polygon_coords, session_dir)
 
         img = resize_to_minimum(raster_np, TILE_SIZE)
-        tf.keras.utils.save_img(img_path, img.numpy())
 
-        if img.shape[:2] != (TILE_SIZE, TILE_SIZE):
-            tiles, tile_names = slice_image(img, TILE_SIZE)
-        else:
-            tiles = [img]
-            tile_names = None
-
+        tiles, tile_names = slice_image(img, TILE_SIZE)
         masks = run_inference(model, tiles, model_config.batch_size)
-
-        mask_merged = merge_masks(masks, tile_names) if tile_names else masks[0]
-
-        tf.keras.utils.save_img(mask_path, tf.expand_dims(mask_merged, axis=-1))
+        mask_merged = merge_masks(masks, tile_names)
 
         overlay = create_overlay_image(img, mask_merged)
 
@@ -75,23 +64,24 @@ def perform_segmentation(
         st.success("Spatial analysis complete.")
         st.rerun()
 
-    except Exception as e:
-        st.error(f"Analysis failed: {e!s}")
+    except Exception as exc:
+        st.error(f"Analysis failed: {exc!s}")
         raise
 
 
-def _download_raster(polygon_coords, session_dir):
-
-    date_dir = os.path.join(session_dir, "analysis")
-    os.makedirs(date_dir, exist_ok=True)
+def _download_raster(
+    polygon_coords: PolygonCoords, session_dir: str
+) -> tuple[NDArray[np.uint8], list[float]]:
+    date_dir = Path(session_dir) / "analysis"
+    date_dir.mkdir(parents=True, exist_ok=True)
 
     lons = [c[1] for c in polygon_coords]
     lats = [c[0] for c in polygon_coords]
     bbox = [min(lats), min(lons), max(lats), max(lons)]
 
-    tiff_path = os.path.join(date_dir, "raster.tif")
+    tiff_path = date_dir / "raster.tif"
     leafmap.map_tiles_to_geotiff(
-        output=tiff_path,
+        output=str(tiff_path),
         bbox=bbox,
         zoom=FIXED_ZOOM_LEVEL,
         source="SATELLITE",
@@ -101,5 +91,6 @@ def _download_raster(polygon_coords, session_dir):
     )
 
     Image.MAX_IMAGE_PIXELS = None
-    raster = Image.open(tiff_path).convert("RGB")
-    return np.array(raster), date_dir, bbox
+    with Image.open(tiff_path) as raster:
+        raster_rgb = np.array(raster.convert("RGB"))
+    return raster_rgb, bbox

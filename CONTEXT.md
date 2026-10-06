@@ -12,7 +12,7 @@ The application and benchmark share the dependency-light operations in `ml/segme
 
 The interactive application is assembled by `app.py` and `ml/pipeline_omer.py`. Portal-only concerns such as Streamlit state, imagery acquisition, session directories, and user feedback remain outside the shared core.
 
-The benchmark is implemented by `benchmarks/run_enb5_system_benchmark.py`. It uses the shared core but owns benchmark-specific concerns such as local raster cropping, timing, memory sampling, model adapters, aggregation, and result files. It does not benchmark imagery acquisition or Streamlit rendering.
+The benchmark is implemented by `benchmarks/system_benchmark.py`. It uses the shared core but owns benchmark-specific concerns such as local raster cropping, timing, memory sampling, model adapters, aggregation, and result files. It does not benchmark imagery acquisition or Streamlit rendering.
 
 ## Sources of truth
 
@@ -24,7 +24,7 @@ The benchmark is implemented by `benchmarks/run_enb5_system_benchmark.py`. It us
 - Shared segmentation operations: `ml/segmentation_core.py`
 - Portal-specific pipeline adapter: `ml/pipeline_omer.py`
 - Benchmark protocol, Docker commands, inputs, and outputs: `benchmarks/README.md`
-- Benchmark implementation and model adapters: `benchmarks/run_enb5_system_benchmark.py`
+- Benchmark implementation and model adapters: `benchmarks/system_benchmark.py`
 - Benchmark container dependencies: `benchmarks/environment.yml`
 - Application and development dependencies: `environment.yml`
 - Quality-tool configuration and commands: `pyproject.toml`, `Makefile`, `.github/workflows/ci.yml`

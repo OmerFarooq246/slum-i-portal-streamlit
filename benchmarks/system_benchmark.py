@@ -27,6 +27,7 @@ from PIL import Image
 from rasterio.windows import Window
 
 from config.settings import TILE_SIZE
+from ml.SegFormer import SEGFORMER_BASE_CONFIG_PATH, load_segformer, run_segformer_inference
 from ml.segmentation_core import (
     InferenceTimings,
     create_overlay_image,
@@ -37,27 +38,33 @@ from ml.segmentation_core import (
     slice_image,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RASTER_PATH = PROJECT_ROOT / "benchmarks/data/raster_benchmark.tif"
-RESULTS_ROOT = PROJECT_ROOT / "benchmarks/results"
+RASTER_PATH = Path("benchmarks/data/raster_benchmark.tif")
+RESULTS_ROOT = Path("benchmarks/results")
 ModelLoader = Callable[[str], Any]
 InferenceRunner = Callable[..., list[Any]]
 
 
 @dataclass(frozen=True)
 class ModelAdapter:
-    """Model-specific loading and inference operations used by the benchmark."""
+    """Model-specific artifacts and operations used by the benchmark."""
 
     default_weights: Path
     load: ModelLoader
     infer: InferenceRunner
+    supporting_artifacts: tuple[Path, ...] = ()
 
 
 MODEL_ADAPTERS: dict[str, ModelAdapter] = {
     "enb5_seg_islamabad": ModelAdapter(
-        default_weights=PROJECT_ROOT / "models/enb5_seg_islamabad.h5",
+        default_weights=Path("models/enb5_seg_islamabad.h5"),
         load=load_enb5_seg,
         infer=run_inference,
+    ),
+    "segformer_b5_islamabad": ModelAdapter(
+        default_weights=Path("models/segformer_b5_islamabad.h5"),
+        load=load_segformer,
+        infer=run_segformer_inference,
+        supporting_artifacts=(SEGFORMER_BASE_CONFIG_PATH,),
     ),
 }
 ROI_SPECS: Sequence[tuple[str, int]] = (
@@ -112,6 +119,17 @@ class PeakMemorySampler:
         self._sample_once()
         return self.peak_bytes / (1024 * 1024)
 
+    def __enter__(self) -> PeakMemorySampler:
+        self.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.stop()
+
+    @property
+    def peak_megabytes(self) -> float:
+        return self.peak_bytes / (1024 * 1024)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -122,7 +140,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         choices=tuple(MODEL_ADAPTERS),
         default="enb5_seg_islamabad",
-        help="Model adapter to benchmark; add future adapters to MODEL_ADAPTERS",
+        help="Model configuration to benchmark",
     )
     parser.add_argument(
         "--results-dir",
@@ -138,18 +156,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def project_path(path: Path) -> Path:
-    """Resolve command-line paths relative to the repository root."""
-    return path if path.is_absolute() else PROJECT_ROOT / path
-
-
 def selected_weights_path(args: argparse.Namespace) -> Path:
     return MODEL_ADAPTERS[args.model].default_weights
 
 
 def selected_results_dir(args: argparse.Namespace) -> Path:
     requested = args.results_dir or RESULTS_ROOT / args.model
-    return project_path(requested)
+    if requested.is_absolute():
+        raise ValueError("Results directory must be relative to the repository root")
+    return requested
 
 
 def validate_inputs(args: argparse.Namespace, weights_path: Path) -> None:
@@ -157,6 +172,9 @@ def validate_inputs(args: argparse.Namespace, weights_path: Path) -> None:
         raise FileNotFoundError(f"Source raster not found: {RASTER_PATH}")
     if not weights_path.is_file():
         raise FileNotFoundError(f"Model weights not found: {weights_path}")
+    for artifact in MODEL_ADAPTERS[args.model].supporting_artifacts:
+        if not artifact.exists():
+            raise FileNotFoundError(f"Supporting model artifact not found: {artifact}")
     if args.batch_size < 1 or args.cpu_limit <= 0:
         raise ValueError("Batch size and CPU limit must both be greater than zero")
     if args.warmup_runs != 1 or args.measured_runs != 5:
@@ -176,11 +194,18 @@ def validate_inputs(args: argparse.Namespace, weights_path: Path) -> None:
             )
 
 
-def file_sha256(path: Path) -> str:
+def path_sha256(path: Path) -> str:
+    """Hash a checkpoint file or a directory tree deterministically."""
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
+
+    files = [path] if path.is_file() else sorted(item for item in path.rglob("*") if item.is_file())
+    for file_path in files:
+        if path.is_dir():
+            digest.update(file_path.relative_to(path).as_posix().encode())
+            digest.update(b"\0")
+        with file_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
     return digest.hexdigest()
 
 
@@ -213,7 +238,7 @@ def load_raster_roi(raster_path: Path, crop_x: int, crop_y: int, pixels: int) ->
     return np.transpose(data[:3], (1, 2, 0)).astype(np.uint8)
 
 
-def generate_outputs(image, mask: ImageArray, output_dir: Path) -> None:
+def generate_outputs(image: tf.Tensor, mask: ImageArray, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     overlay = Image.fromarray(create_overlay_image(image, mask))
     Image.fromarray(mask).save(output_dir / "mask.png", format="PNG")
@@ -231,37 +256,36 @@ def run_pipeline(
     work_dir: Path,
     inference_runner: InferenceRunner = run_inference,
 ) -> dict[str, float]:
-    sampler = PeakMemorySampler()
-    sampler.start()
-    total_start = time.perf_counter()
+    with PeakMemorySampler() as sampler:
+        total_start = time.perf_counter()
 
-    started = time.perf_counter()
-    pixels = grid_size * TILE_SIZE
-    image = resize_to_minimum(
-        load_raster_roi(raster_path, crop_x, crop_y, pixels),
-        TILE_SIZE,
-    )
-    raster_latency = time.perf_counter() - started
+        started = time.perf_counter()
+        pixels = grid_size * TILE_SIZE
+        image = resize_to_minimum(
+            load_raster_roi(raster_path, crop_x, crop_y, pixels),
+            TILE_SIZE,
+        )
+        raster_latency = time.perf_counter() - started
 
-    started = time.perf_counter()
-    tiles, tile_names = slice_image(image, TILE_SIZE)
-    tiling_latency = time.perf_counter() - started
+        started = time.perf_counter()
+        tiles, tile_names = slice_image(image, TILE_SIZE)
+        tiling_latency = time.perf_counter() - started
 
-    inference_timings = InferenceTimings()
-    started = time.perf_counter()
-    masks = inference_runner(model, tiles, batch_size, timings=inference_timings)
-    inference_latency = time.perf_counter() - started
+        inference_timings = InferenceTimings()
+        started = time.perf_counter()
+        masks = inference_runner(model, tiles, batch_size, timings=inference_timings)
+        inference_latency = time.perf_counter() - started
 
-    started = time.perf_counter()
-    stitched = merge_masks(masks, tile_names)
-    stitching_latency = time.perf_counter() - started
+        started = time.perf_counter()
+        stitched = merge_masks(masks, tile_names)
+        stitching_latency = time.perf_counter() - started
 
-    started = time.perf_counter()
-    generate_outputs(image, stitched, work_dir / roi_name / "outputs")
-    output_latency = time.perf_counter() - started
+        started = time.perf_counter()
+        generate_outputs(image, stitched, work_dir / roi_name / "outputs")
+        output_latency = time.perf_counter() - started
 
-    total_latency = time.perf_counter() - total_start
-    peak_memory = sampler.stop()
+        total_latency = time.perf_counter() - total_start
+
     tile_count = len(tiles)
     return {
         "raster_load_preprocess_ms": raster_latency * 1_000,
@@ -275,12 +299,12 @@ def run_pipeline(
         "total_latency_ms": total_latency * 1_000,
         "tiles_per_second": tile_count / inference_latency,
         "model_tiles_per_second": tile_count / inference_timings.model_forward_seconds,
-        "peak_process_memory_mb": peak_memory,
+        "peak_process_memory_mb": sampler.peak_megabytes,
     }
 
 
 def write_csv(path: Path, rows: Sequence[dict[str, Any]], fieldnames: Iterable[str]) -> None:
-    with path.open("w", newline="") as handle:
+    with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(fieldnames))
         writer.writeheader()
         writer.writerows(rows)
@@ -344,7 +368,7 @@ def write_paper_table(path: Path, summary: Sequence[dict[str, Any]]) -> None:
             for metric in metric_order
         )
         lines.append("| " + " | ".join(values) + " |")
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -374,16 +398,21 @@ def main() -> int:
         "crop_x": args.crop_x,
         "crop_y": args.crop_y,
         "source_raster": str(RASTER_PATH),
-        "source_raster_sha256": file_sha256(RASTER_PATH),
+        "source_raster_sha256": path_sha256(RASTER_PATH),
         "weights_path": str(weights_path),
-        "weights_sha256": file_sha256(weights_path),
+        "weights_sha256": path_sha256(weights_path),
+        "supporting_artifacts": {
+            str(path): path_sha256(path) for path in MODEL_ADAPTERS[args.model].supporting_artifacts
+        },
         "tiles_per_roi": {name: grid * grid for name, grid in ROI_SPECS},
         "model_initialization_timed": False,
         "imagery_acquisition_timed": False,
         "tensorflow_synchronous_execution": True,
     }
     metadata.update(detected_cgroup_limits())
-    (results_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    (results_dir / "metadata.json").write_text(
+        json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+    )
 
     # Initialize and load once, then reuse the same resident model for all runs.
     model_adapter = MODEL_ADAPTERS[args.model]

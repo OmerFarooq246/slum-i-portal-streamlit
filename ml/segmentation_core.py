@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from os import PathLike
+from typing import Any
 
 import numpy as np
 import tensorflow as tf
+from numpy.typing import NDArray
 
 from ml.ENB5_Segmenter import EfficientNet_Segmenter_Config, EfficientNetB5_Segmenter
+
+ImageArray = NDArray[np.uint8]
 
 
 @dataclass
@@ -20,7 +25,7 @@ class InferenceTimings:
     postprocessing_seconds: float = 0.0
 
 
-def load_enb5_seg(weights_path: str) -> EfficientNetB5_Segmenter:
+def load_enb5_seg(weights_path: str | PathLike[str]) -> EfficientNetB5_Segmenter:
     """Build ENB5-Seg without external pretrained weights and load a checkpoint."""
     config = EfficientNet_Segmenter_Config()
     model = EfficientNetB5_Segmenter(config)
@@ -30,8 +35,11 @@ def load_enb5_seg(weights_path: str) -> EfficientNetB5_Segmenter:
     return model
 
 
-def resize_to_minimum(img_np, min_size):
+def resize_to_minimum(img_np: Any, min_size: int) -> tf.Tensor:
     """Upscale an image when either dimension is smaller than ``min_size``."""
+    if min_size < 1:
+        raise ValueError("min_size must be at least 1")
+
     height, width, _ = img_np.shape
     if width < min_size or height < min_size:
         scale = max(min_size / width, min_size / height)
@@ -45,9 +53,15 @@ def resize_to_minimum(img_np, min_size):
     return tf.cast(image, tf.uint8)
 
 
-def slice_image(raster, tile_size):
+def slice_image(raster: Any, tile_size: int) -> tuple[list[Any], list[str]]:
     """Slice an image into the same edge-aligned, in-memory tiles used by the portal."""
+    if tile_size < 1:
+        raise ValueError("tile_size must be at least 1")
+
     raster_height, raster_width = raster.shape[0], raster.shape[1]
+    if raster_height < tile_size or raster_width < tile_size:
+        raise ValueError("raster dimensions must be at least tile_size")
+
     tiles, names = [], []
     for top in range(0, raster_height, tile_size):
         for left in range(0, raster_width, tile_size):
@@ -64,7 +78,12 @@ def slice_image(raster, tile_size):
     return tiles, names
 
 
-def run_inference(model, tiles, batch_size, timings: InferenceTimings | None = None):
+def run_inference(
+    model: Any,
+    tiles: list[Any],
+    batch_size: int,
+    timings: InferenceTimings | None = None,
+) -> list[ImageArray]:
     """Run normalized, batched inference and return binary uint8 masks.
 
     When ``timings`` is supplied, durations are accumulated separately for batch
@@ -96,8 +115,13 @@ def run_inference(model, tiles, batch_size, timings: InferenceTimings | None = N
     return all_masks
 
 
-def merge_masks(masks, tile_names):
+def merge_masks(masks: list[ImageArray], tile_names: list[str]) -> ImageArray:
     """Merge overlapping masks using tile names formatted as ``tile_X_Y``."""
+    if not masks:
+        raise ValueError("at least one mask is required")
+    if len(masks) != len(tile_names):
+        raise ValueError("masks and tile_names must have the same length")
+
     coords = [tuple(map(int, name.split("_")[1:3])) for name in tile_names]
     full_width = max(x + mask.shape[1] for mask, (x, _) in zip(masks, coords, strict=True))
     full_height = max(y + mask.shape[0] for mask, (_, y) in zip(masks, coords, strict=True))
@@ -110,7 +134,12 @@ def merge_masks(masks, tile_names):
     return merged
 
 
-def create_overlay_image(image, mask, color=(255, 0, 0), alpha=0.5):
+def create_overlay_image(
+    image: Any,
+    mask: ImageArray,
+    color: tuple[int, int, int] = (255, 0, 0),
+    alpha: float = 0.5,
+) -> ImageArray:
     """Return an RGB array with the positive mask blended over the image."""
     if hasattr(image, "numpy"):
         image = image.numpy()
