@@ -67,17 +67,20 @@ class Encoder(keras.layers.Layer):
         super().__init__(**kwargs)
         base_model = tf.keras.applications.EfficientNetB5(
             include_top=False,
-            weights="imagenet",
+            weights=None,
             input_shape=input_shape,
         )
+        encoder_layer_names = (
+            "block1c_add",
+            "block2e_add",
+            "block3e_add",
+            "block4g_add",
+            "block5g_add",
+            "block6i_add",
+            "block7c_add",
+        )
         self.encoder_layers = [
-            base_model.layers[41],
-            base_model.layers[115],
-            base_model.layers[189],
-            base_model.layers[293],
-            base_model.layers[396],
-            base_model.layers[530],
-            base_model.layers[573],
+            base_model.get_layer(layer_name) for layer_name in encoder_layer_names
         ]
         encoder_outputs = [layer.output for layer in self.encoder_layers]
         self.encoder_model = keras.Model(base_model.input, encoder_outputs)
