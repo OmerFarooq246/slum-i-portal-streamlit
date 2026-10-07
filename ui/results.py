@@ -8,6 +8,8 @@ from typing import Any
 
 import streamlit as st
 
+from config.settings import TILE_SIZE
+
 
 def display_results_summary() -> None:
     for session_id, result in list(st.session_state.processing_results.items()):
@@ -16,6 +18,12 @@ def display_results_summary() -> None:
             tiles = result["primary_result"].get("tiles_info")
             if tiles is not None:
                 st.caption(f"{len(tiles)} tiles processed")
+        if result.get("bbox_expanded"):
+            width, height = result["requested_size"]
+            st.caption(
+                f"Selected area ({width} x {height} px) was expanded to meet the minimum "
+                f"{TILE_SIZE} x {TILE_SIZE} px analysis size."
+            )
 
         c1, c2 = st.columns(2)
         with c1:

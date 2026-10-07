@@ -1,5 +1,7 @@
 import leafmap
 
+from config.settings import FIXED_ZOOM_LEVEL
+
 BBOX = [
     72.99126713424454,
     33.67408465650475,
@@ -14,7 +16,7 @@ def main():
     leafmap.map_tiles_to_geotiff(
         output=geotiff_path,
         bbox=BBOX,
-        zoom=19,
+        zoom=FIXED_ZOOM_LEVEL,
         source="SATELLITE",
         overwrite=True,
         quiet=False,

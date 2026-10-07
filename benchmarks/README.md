@@ -25,10 +25,10 @@ PY
 Generate the local benchmark raster from the repository root:
 
 ```bash
-python scripts/benchmark_download_raster.py
+python -m scripts.benchmark_download_raster
 ```
 
-The download script writes `benchmarks/data/raster_benchmark.tif` using its configured bounding box and zoom level. The current configuration has been verified to produce a 4096 x 4096 raster, which safely covers the benchmark's largest 3072 x 3072 ROI. See `data/README.md` for verification and crop-offset details. Model checkpoints and the generated raster are intentionally excluded from Git.
+The download script writes `benchmarks/data/raster_benchmark.tif` using its configured bounding box and the fixed zoom level from `config/settings.py`. The current configuration has been verified to produce a 4096 x 4096 raster, which safely covers the benchmark's largest 3072 x 3072 ROI. See `data/README.md` for verification and crop-offset details. Model checkpoints and the generated raster are intentionally excluded from Git.
 
 ## Build and run
 

@@ -5,6 +5,7 @@ dependencies:
   - python=3.11
   - folium>=0.17,<1
   - gdal>=3.9,<4
+  - ipyvuetify=1.11.3
   - leafmap>=0.35,<1
   - numpy=1.26.4
   - pillow>=12.3,<13
