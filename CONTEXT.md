@@ -1,100 +1,38 @@
-# Slum-i — Project Context
+# Slum-i Portal Repository Context
 
-## Overview
+## Purpose
 
-Slum-i is a single-page Streamlit dashboard for detecting informal settlements in satellite imagery using a TensorFlow segmentation model. The app lets users draw a bounding box on a map, downloads the corresponding satellite tiles, runs slum detection, and displays the original image, binary mask, and overlay side-by-side.
+Slum-i is a Streamlit portal for detecting informal settlements in satellite imagery. It also includes a controlled, Docker-based benchmark for measuring the shared segmentation pipeline and comparing model performance.
 
----
+This file records only repository-level relationships and boundaries. Implementation details, configuration values, commands, and benchmark protocol belong in their authoritative files listed below.
 
-## Project Structure
+## Architecture
 
-```
-slum-i/
-├── app.py                  # Entry point
-├── ui/
-│   ├── sidebar.py          # Controls: model, date, location, tile size
-│   ├── map.py              # Folium map with draw plugin + KML support
-│   └── results.py          # Summary expander, 3-column image display, zip download
-├── pipeline/
-│   └── tiles.py            # Core pipeline: download → slice → infer → stitch
-├── ml/
-│   ├── loader.py           # @st.cache_resource TF model loader
-│   └── images.py           # generate_mask + create_overlay_image
-├── config/
-│   ├── settings.py         # Zoom level, supported dates, preset locations, basemaps
-│   └── models.py           # ModelConfig dataclass + model registry
-├── utils/
-│   ├── state.py            # Session state init/cleanup
-│   └── files.py            # UUID-based session dirs under tmp/
-├── models/
-│   └── model.h5            # Placeholder — place real TF model here
-└── requirements.txt
-```
+The application and benchmark share the dependency-light operations in `ml/segmentation_core.py`, including model loading, image preparation, in-memory tiling, inference, mask merging, and overlay creation.
 
----
+The interactive application is assembled by `app.py` and `ml/pipeline_omer.py`. Portal-only concerns such as Streamlit state, imagery acquisition, session directories, and user feedback remain outside the shared core.
 
-## Pipeline
+The benchmark is implemented by `benchmarks/system_benchmark.py`. It uses the shared core but owns benchmark-specific concerns such as local raster cropping, timing, memory sampling, model adapters, aggregation, and result files. It does not benchmark imagery acquisition or Streamlit rendering.
 
-1. User draws a rectangle on the Folium map
-2. Clicks "Process Spatial Analysis" → `pipeline/tiles.py:process_polygon`
-3. **Download** — `leafmap.map_tiles_to_geotiff` fetches tiles at zoom=19 for the selected date
-4. **Resize** — image trimmed to nearest 512px multiple, saved as GeoTIFF
-5. **Tile** — GeoTIFF sliced into 512×512 (or 256×256) PNG patches
-6. **Inference** — each tile passed through the TF model via `ml/images.py:generate_mask` → binary mask
-7. **Stitch** — masks reassembled into a full-region mask; dotted lines mark tile boundaries
-8. **Overlay** — mask blended semi-transparently (red, α=0.5) over original image
-9. Results stored in `st.session_state.processing_results` keyed by UUID
+## Sources of truth
 
----
+- Project setup and portal usage: `README.md`
+- Application entry point and UI flow: `app.py`, `ui/`
+- Model registry, checkpoints, and portal batch sizes: `config/models.py`
+- Shared constants and map presets: `config/settings.py`
+- ENB5-Seg architecture: `ml/ENB5_Segmenter.py`
+- Shared segmentation operations: `ml/segmentation_core.py`
+- Portal-specific pipeline adapter: `ml/pipeline_omer.py`
+- Benchmark protocol, Docker commands, inputs, and outputs: `benchmarks/README.md`
+- Benchmark implementation and model adapters: `benchmarks/system_benchmark.py`
+- Benchmark container dependencies: `benchmarks/environment.yml`
+- Application and development dependencies: `environment.yml`
+- Quality-tool configuration and commands: `pyproject.toml`, `Makefile`, `.github/workflows/ci.yml`
+- Local benchmark raster requirements: `benchmarks/data/README.md`
 
-## Configuration
+## Repository boundaries
 
-| Setting | Value |
-|---|---|
-| Fixed zoom level | 19 |
-| Default tile size | 512px (256px also available) |
-| Models | `enb5_seg_lahore.h5` (Lahore), `enb5_seg_islamabad.h5` (Islamabad) — ~109 MB each |
-| Supported dates | Live (2025-06-26), Dec 2024, Jun 2024, Dec 2023 — via ArcGIS Wayback WMS |
-| Preset locations | Lahore, Islamabad, Karachi, Mumbai |
-| Basemaps | OpenStreetMap, Google Satellite |
-
----
-
-## Type System
-
-All modules use full type annotations. Key TypedDicts:
-
-- `ModelConfig` — frozen dataclass: `name`, `path`, `regions`, `model`
-- `SidebarData`, `LocationInfo`, `DateSelection`
-- `TileInfo`, `InferenceResult`, `DateResult`, `SpatialResult`
-- `SessionState`, `TiffData`
-
----
-
-## Open TODOs (`ml/images.py:generate_mask`)
-
-1. Confirm model input size — add resizing if the model expects a fixed resolution
-2. Confirm normalization — currently raw float32 with no scaling
-3. Confirm output format — currently assumes single-channel output thresholded at 0.5
-
----
-
-## Setup
-
-```bash
-conda activate <gdal-env>
-streamlit run app.py
-```
-
-Dependencies: `tensorflow`, `streamlit`, `rasterio`, `geopandas`, `pillow`, `gdal`, `streamlit-folium`, `folium`, `leafmap`, `owslib`, `numpy==1.26.4`
-
----
-
-## Refactor History (April 2026)
-
-- Renamed from `main.py` → `app.py`; `components/` → `ui/`; `core/` → `pipeline/`; added `ml/`
-- Removed `views/` (home, single-image inference, spatio-temporal analysis)
-- Removed temporal analysis and PyTorch dependencies
-- Switched to TensorFlow `.h5` models
-- Added full typing across all modules
-- Converted multi-view router to single-page spatial analysis app
+- Model checkpoints, benchmark rasters, benchmark results, and temporary portal sessions are local/generated artifacts and are not committed.
+- The benchmark keeps tiles in memory and saves only final inspection artifacts and result files.
+- Each benchmark model is registered through its model adapter so model-specific loading and inference can change without duplicating the shared spatial pipeline.
+- Documentation should reference the sources of truth above instead of copying values or implementation details into this file.

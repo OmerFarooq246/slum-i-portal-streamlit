@@ -1,0 +1,16 @@
+name: slum-i-benchmark
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - numpy=1.26.4
+  - pillow>=12.3,<13
+  - pip
+  - psutil=6.0.0
+  - rasterio=1.4.4
+  - pip:
+      - numpy==1.26.4
+      - tensorflow==2.20.0
+      - tf-keras==2.20.1
+      - transformers==4.57.3

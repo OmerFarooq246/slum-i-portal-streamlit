@@ -1,14 +1,13 @@
-from typing import Any, Dict
+from typing import Any
 
 import folium
-import streamlit as st
 from folium.plugins import Draw
 from streamlit_folium import st_folium
 
 _SATELLITE_TILES = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
 
 
-def create_interactive_map(location_info: Dict[str, Any]) -> Dict[str, Any]:
+def create_interactive_map(location_info: dict[str, Any]) -> dict[str, Any]:
     m = folium.Map(location=location_info["center"], zoom_start=location_info["zoom"])
 
     folium.TileLayer(tiles=_SATELLITE_TILES, attr="Google", name="Satellite").add_to(m)

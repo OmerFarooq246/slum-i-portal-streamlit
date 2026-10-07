@@ -7,8 +7,8 @@ import streamlit as st
 from PIL import Image
 
 from config.models import ModelConfig, get_available_models
-from config.settings import FIXED_ZOOM_LEVEL, PRESET_LOCATIONS, TILE_SIZE
-from pipeline_omer import load_ENB5_Seg, perform_segmentation
+from config.settings import PRESET_LOCATIONS
+from ml.pipeline_omer import load_ENB5_Seg, perform_segmentation
 from ui.map import create_interactive_map
 from ui.results import display_detection_results, display_results_summary
 from utils.state import init_session_state
@@ -55,7 +55,7 @@ header[data-testid="stHeader"]   { display: none !important; }
 footer                           { display: none !important; }
 section[data-testid="stSidebar"] { display: none !important; }
 
-/* Main container — document margins */
+/* Main container - document margins */
 .block-container {
     padding-top: 3rem !important;
     padding-bottom: 3rem !important;
@@ -65,7 +65,7 @@ section[data-testid="stSidebar"] { display: none !important; }
     background-color: #fffff8 !important;
 }
 
-/* Title — LaTeX \title style */
+/* Title - LaTeX \title style */
 .latex-title {
     font-family: "Computer Modern Serif", "CMU Serif", Georgia, serif;
     font-size: 3rem !important;
@@ -92,7 +92,7 @@ h1, h2, h3, h4 {
     color: #111111 !important;
 }
 
-/* Buttons — LaTeX-ish, clean borders */
+/* Buttons - LaTeX-ish, clean borders */
 [data-testid="stBaseButton-primary"] {
     background-color: #111111 !important;
     border: 1px solid #111111 !important;
@@ -130,7 +130,7 @@ h1, h2, h3, h4 {
     opacity: 0.8 !important;
 }
 
-/* Info box — muted paper style */
+/* Info box - muted paper style */
 [data-testid="stInfo"] {
     background-color: #f0f0e8 !important;
     border: 1px solid #cccccc !important;
@@ -187,24 +187,22 @@ def _get_model_for_city(city: str) -> tuple[str, ModelConfig]:
     return first_key, get_available_models()[first_key]
 
 
-def _city_location(city: str) -> dict:
-    return PRESET_LOCATIONS.get(city, list(PRESET_LOCATIONS.values())[0])
+def _city_location(city: str) -> dict[str, object]:
+    return PRESET_LOCATIONS.get(city, next(iter(PRESET_LOCATIONS.values())))
 
 
 def main() -> None:
     init_session_state()
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-    ENB5_Seg = load_ENB5_Seg()
-
     city = st.session_state.selected_city
-    model_key, model_config = _get_model_for_city(city)
+    _model_key, model_config = _get_model_for_city(city)
     location_info = _city_location(city)
+    ENB5_Seg = load_ENB5_Seg(model_config.weights_path)
 
     # ── Title ─────────────────────────────────────────────────────────────────
     st.markdown(
-        "<p class='latex-title'>Slum Detection Software</p>"
-        "<hr class='latex-rule'>",
+        "<p class='latex-title'>Slum Detection Software</p><hr class='latex-rule'>",
         unsafe_allow_html=True,
     )
 
@@ -218,13 +216,19 @@ def main() -> None:
         st.markdown("**Location**")
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("Lahore", use_container_width=True,
-                         type="primary" if city == "Lahore" else "secondary"):
+            if st.button(
+                "Lahore",
+                use_container_width=True,
+                type="primary" if city == "Lahore" else "secondary",
+            ):
                 st.session_state.selected_city = "Lahore"
                 st.rerun()
         with c2:
-            if st.button("Islamabad", use_container_width=True,
-                         type="primary" if city == "Islamabad" else "secondary"):
+            if st.button(
+                "Islamabad",
+                use_container_width=True,
+                type="primary" if city == "Islamabad" else "secondary",
+            ):
                 st.session_state.selected_city = "Islamabad"
                 st.rerun()
 

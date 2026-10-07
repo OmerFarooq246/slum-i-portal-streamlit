@@ -1,0 +1,24 @@
+name: slum-i-segformer-benchmark
+
+services:
+  benchmark:
+    image: slum-i-segmentation-benchmark:arm64
+    build:
+      context: ..
+      dockerfile: benchmarks/Dockerfile
+    platform: linux/arm64
+    command:
+      - --model
+      - segformer_b5_islamabad
+      - --batch-size
+      - "4"
+      - --cpu-limit
+      - "2"
+    cpus: 2.0
+    mem_limit: 4g
+    memswap_limit: 4g
+    network_mode: none
+    volumes:
+      - ../models:/app/models:ro
+      - ./data:/app/benchmarks/data:ro
+      - ./results:/app/benchmarks/results

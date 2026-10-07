@@ -1,0 +1,14 @@
+.git
+__pycache__/
+*.pyc
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+archive/
+models/
+public/outputs/
+tmp/
+benchmarks/data/*
+benchmarks/results/*
