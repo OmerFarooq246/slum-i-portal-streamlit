@@ -11,12 +11,14 @@ services:
       - --model
       - segformer_b5_islamabad
       - --batch-size
-      - "4"
+      - "3"
       - --cpu-limit
       - "2"
+      - --results-dir
+      - benchmarks/results/segformer_b5_islamabad_b3
     cpus: 2.0
-    mem_limit: 4g
-    memswap_limit: 4g
+    mem_limit: 6g
+    memswap_limit: 6g
     network_mode: none
     volumes:
       - ../models:/app/models:ro

@@ -1,5 +1,5 @@
-import keras
 import tensorflow as tf
+from tensorflow import keras
 
 from config.settings import TILE_SIZE
 

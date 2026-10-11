@@ -17,3 +17,4 @@ coverage.xml
 *.pt
 *.pth
 benchmarks/data/raster_benchmark.tif
+benchmarks/results/**/artifacts/
