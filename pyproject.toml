@@ -1,7 +1,7 @@
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-extend-exclude = ["benchmarks/results", "benchmarks/results_5_mruns", "benchmarks/results_10_mruns"]
+extend-exclude = ["benchmarks/results", "benchmarks/results_5_mruns", "benchmarks/results_10_mruns", "benchmarks/pegasus_results"]
 
 [tool.ruff.lint]
 select = [

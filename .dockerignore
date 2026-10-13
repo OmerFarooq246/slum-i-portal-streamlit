@@ -14,3 +14,4 @@ benchmarks/data/*
 benchmarks/results/*
 benchmarks/results_5_mruns/*
 benchmarks/results_10_mruns/*
+benchmarks/pegasus_results/*
