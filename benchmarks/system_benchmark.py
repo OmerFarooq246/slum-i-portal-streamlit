@@ -150,7 +150,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--crop-x", type=int, default=0, help="Deterministic left pixel offset")
     parser.add_argument("--crop-y", type=int, default=0, help="Deterministic top pixel offset")
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--warmup-runs", type=int, default=1)
+    parser.add_argument("--warmup-runs", type=int, default=3)
     parser.add_argument("--measured-runs", type=int, default=10, help="At least 10 runs per ROI")
     parser.add_argument("--cpu-limit", type=float, default=2.0)
     return parser.parse_args()
@@ -177,9 +177,9 @@ def validate_inputs(args: argparse.Namespace, weights_path: Path) -> None:
             raise FileNotFoundError(f"Supporting model artifact not found: {artifact}")
     if args.batch_size < 1 or args.cpu_limit <= 0:
         raise ValueError("Batch size and CPU limit must both be greater than zero")
-    if args.warmup_runs != 1 or args.measured_runs < 10:
+    if args.warmup_runs != 3 or args.measured_runs < 10:
         raise ValueError(
-            "Controlled protocol requires exactly 1 warm-up and at least 10 measured runs"
+            "Controlled protocol requires exactly 3 warm-ups and at least 10 measured runs"
         )
     required_extent = max(grid for _, grid in ROI_SPECS) * TILE_SIZE
     with rasterio.open(RASTER_PATH) as src:
@@ -426,18 +426,23 @@ def main() -> int:
 
     raw_rows: list[dict[str, Any]] = []
     for roi_name, grid_size in ROI_SPECS:
-        print(f"Warm-up: {roi_name} ({grid_size * grid_size} tiles)", flush=True)
-        run_pipeline(
-            RASTER_PATH,
-            model,
-            roi_name,
-            grid_size,
-            args.crop_x,
-            args.crop_y,
-            args.batch_size,
-            work_dir,
-            model_adapter.infer,
-        )
+        for warmup_number in range(1, args.warmup_runs + 1):
+            print(
+                f"Warm-up {warmup_number}/{args.warmup_runs}: "
+                f"{roi_name} ({grid_size * grid_size} tiles)",
+                flush=True,
+            )
+            run_pipeline(
+                RASTER_PATH,
+                model,
+                roi_name,
+                grid_size,
+                args.crop_x,
+                args.crop_y,
+                args.batch_size,
+                work_dir,
+                model_adapter.infer,
+            )
         for run_number in range(1, args.measured_runs + 1):
             print(f"Measured run {run_number}/{args.measured_runs}: {roi_name}", flush=True)
             metrics = run_pipeline(

@@ -78,7 +78,7 @@ for cpus in 2 4 6; do
                     micromamba list -n base > "$out/packages.txt"
                     python /app/benchmarks/system_benchmark.py \
                         --model "$model" --cpu-limit "$cpus" --batch-size "$batch" \
-                        --warmup-runs 1 --measured-runs 10 --crop-x 0 --crop-y 0 \
+                        --warmup-runs 3 --measured-runs 10 --crop-x 0 --crop-y 0 \
                         --results-dir "$out"
                 ' sweep "$cpus" "$batch" "$model" "$name" \
                 > "$RESULTS/$name.log" 2>&1 || rc=$?
