@@ -39,7 +39,7 @@ from ml.segmentation_core import (
 )
 
 RASTER_PATH = Path("benchmarks/data/raster_benchmark.tif")
-RESULTS_ROOT = Path("benchmarks/results")
+RESULTS_ROOT = Path("benchmarks/results_10_mruns")
 ModelLoader = Callable[[str], Any]
 InferenceRunner = Callable[..., list[Any]]
 
@@ -145,13 +145,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        help="Output directory; defaults to benchmarks/results/<model>",
+        help="Output directory; defaults to benchmarks/results_10_mruns/<model>",
     )
     parser.add_argument("--crop-x", type=int, default=0, help="Deterministic left pixel offset")
     parser.add_argument("--crop-y", type=int, default=0, help="Deterministic top pixel offset")
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--warmup-runs", type=int, default=1)
-    parser.add_argument("--measured-runs", type=int, default=5)
+    parser.add_argument("--measured-runs", type=int, default=10, help="At least 10 runs per ROI")
     parser.add_argument("--cpu-limit", type=float, default=2.0)
     return parser.parse_args()
 
@@ -177,9 +177,9 @@ def validate_inputs(args: argparse.Namespace, weights_path: Path) -> None:
             raise FileNotFoundError(f"Supporting model artifact not found: {artifact}")
     if args.batch_size < 1 or args.cpu_limit <= 0:
         raise ValueError("Batch size and CPU limit must both be greater than zero")
-    if args.warmup_runs != 1 or args.measured_runs != 5:
+    if args.warmup_runs != 1 or args.measured_runs < 10:
         raise ValueError(
-            "Controlled protocol requires exactly 1 warm-up and exactly 5 measured runs"
+            "Controlled protocol requires exactly 1 warm-up and at least 10 measured runs"
         )
     required_extent = max(grid for _, grid in ROI_SPECS) * TILE_SIZE
     with rasterio.open(RASTER_PATH) as src:
@@ -323,7 +323,7 @@ def summarize(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for metric in (*TIMING_METRICS, *OTHER_METRICS):
             values = [float(row[metric]) for row in roi_rows]
-            item[f"{metric}_median"] = statistics.median(values)
+            item[f"{metric}_mean"] = statistics.mean(values)
             item[f"{metric}_stddev"] = statistics.stdev(values)
         summary.append(item)
     return summary
@@ -360,11 +360,17 @@ def write_paper_table(path: Path, summary: Sequence[dict[str, Any]]) -> None:
         "model_tiles_per_second",
         "peak_process_memory_mb",
     )
-    lines = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
+    lines = [
+        "Values are mean ± sample standard deviation "
+        f"({summary[0]['measured_runs']} measured runs per ROI).",
+        "",
+        "| " + " | ".join(headers) + " |",
+        "|" + "---|" * len(headers),
+    ]
     for row in summary:
         values = [str(row["roi"]).title(), str(row["tile_count"])]
         values.extend(
-            f"{row[f'{metric}_median']:.3f} ± {row[f'{metric}_stddev']:.3f}"
+            f"{row[f'{metric}_mean']:.3f} ± {row[f'{metric}_stddev']:.3f}"
             for metric in metric_order
         )
         lines.append("| " + " | ".join(values) + " |")

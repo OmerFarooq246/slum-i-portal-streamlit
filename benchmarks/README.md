@@ -52,7 +52,11 @@ The SegFormer adapter reconstructs the same two-class MiT-B5 architecture used f
 
 Transformers 4.57.3 uses the legacy TensorFlow Keras API for this model, so the benchmark environment pins `tf-keras==2.20.1` alongside `tensorflow==2.20.0`.
 
-The ENB5-Seg configuration inherits the image's `CMD`. The SegFormer configuration replaces it with SegFormer arguments. Do not run the ARM64 protocol through AMD64 emulation.
+Both Compose configurations supply their model and runtime arguments explicitly. Do not run the ARM64 protocol through AMD64 emulation.
+
+Each ROI uses one excluded warm-up run and at least 10 measured runs (the default). Set `--measured-runs` to a larger value to collect more measurements; values below 10 are rejected. Summary CSV columns use `_mean` and `_stddev`, and paper tables report arithmetic mean ± sample standard deviation across the measured runs. Historical result sets retain their original five measurements; their summaries can be recalculated from the saved raw runs without rerunning inference.
+
+Results from the current protocol are stored in `results_10_mruns/`. Historical five-run results are preserved in `results_5_mruns/` with their original raw measurements and mean-based summaries. Generated PNG artifacts are excluded from Git.
 
 ## Sources of truth
 
