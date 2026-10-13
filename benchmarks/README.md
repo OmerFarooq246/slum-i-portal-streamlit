@@ -60,36 +60,15 @@ Results from the current protocol are stored in `results_10_mruns/`. Historical 
 
 ## Pegasus CPU/batch sweep
 
-`pegasus_sweep.sbatch` submits the complete CPU-only experiment with one command.
-It reserves one node with six CPUs and **8 GiB total job memory**, then runs
-Slurm steps sequentially, each bound to exactly two, four, or six CPUs. A named
-Pyxis/Enroot container is reused across steps; each configuration gets a fresh
-Python process so resident model state is not carried between configurations.
+`pegasus_sweep.sbatch` runs both models across CPUs **2, 4, 6** and batch sizes
+**1-5**, with **8 GiB RAM**, **3 excluded warm-ups**, and **10 measured runs per
+ROI**. The 30 configurations run sequentially on one node, reusing one container
+with a fresh Python process per configuration.
 
-| Parameter | Values |
-| --- | --- |
-| Model | ENB5-Seg and SegFormer B5 |
-| CPUs | 2, 4, 6 |
-| RAM | 8 GiB throughout |
-| Batch size | 1, 2, 3, 4, 5 |
-| Measured runs | 10 per ROI |
-| Excluded warm-up | 3 per ROI |
-| Crop offset | (0, 0) |
+### Build once
 
-This produces 30 configurations, each covering the small, medium, and large ROIs
-(900 measured pipeline runs total). Configurations run sequentially to avoid
-interference and to keep the total memory request at 8 GiB. No screen sessions
-or separate image builds per configuration are required.
-
-### Prepare the image once
-
-After pulling the repository on Pegasus, change to its root. The checkpoints,
-MiT-B5 configuration bundle, and raster listed above are excluded from Git and
-must be transferred separately. Store images and large inputs under
-`/netscratch/$USER`, rather than the home directory.
-
-Use a scheduled compute node to build the existing Dockerfile for the node's
-native architecture; do not use the ARM64 Compose files on Pegasus:
+From the repository root on Pegasus, provide the model files and raster listed
+above, then start a compute-node build session:
 
 ```bash
 srun --partition=batch --nodes=1 --ntasks=1 --cpus-per-task=4 --mem=8G \
@@ -99,76 +78,34 @@ srun --partition=batch --nodes=1 --ntasks=1 --cpus-per-task=4 --mem=8G \
   --container-workdir="$PWD" --pty bash
 ```
 
-Inside that build session:
+Inside the session, build and save the image:
 
 ```bash
-uname -m
 podman build --format=docker -f benchmarks/Dockerfile -t slum-i-benchmark:pegasus-v1 .
 enroot import -o /netscratch/$USER/benchmark-v1.sqsh podman://slum-i-benchmark:pegasus-v1
 exit
 ```
 
-`--format=docker` preserves the Micromamba build shell. The sweep bypasses the
-Docker entrypoint and activates the environment explicitly with
-`micromamba run -n base`. Keep the same `.sqsh` image for all repeats; the
-environment YAML has some unpinned dependencies, so rebuilding can change the
-resolved environment. Rebuild if you intentionally change the benchmark code;
-the image contains the benchmark code used for execution.
+Reuse this image for repeat experiments; rebuild after changing benchmark code.
 
-### Submit and inspect
+### Run the sweep
 
-From the repository root:
+Submit from the repository root, replacing `JOB_ID` with the returned ID:
 
 ```bash
 sbatch benchmarks/pegasus_sweep.sbatch /netscratch/$USER/benchmark-v1.sqsh
 squeue -u "$USER"
-# Replace JOB_ID with the ID printed by sbatch:
 tail -f slurm-slum-i-sweep-JOB_ID.out
-sacct -j JOB_ID --format=JobID,State,Elapsed,AllocCPUS,MaxRSS,ExitCode
 ```
 
-Results are stored under `benchmarks/pegasus_results/JOB_ID/`, with one directory
-per configuration, e.g. `enb5_seg_islamabad_cpu2_ram8_b1/`. Each directory contains
-the standard benchmark outputs plus CPU affinity and package records. The
-top-level directory includes image SHA-256, node/CPU information, filesystem,
-allocation details, per-configuration logs, and `status.csv`. Only rows with
-`exit_code=0` represent completed configurations; a failed configuration may
-leave partial artifacts. Failures are recorded, remaining configurations are
-attempted, and the overall job exits unsuccessfully if any configuration failed.
+Results and logs are saved in `benchmarks/pegasus_results/JOB_ID/`, with a separate
+directory per configuration. Check `status.csv` for completion (`exit_code=0`);
+failed configurations are recorded and the remaining sweep continues.
 
-The script stages inputs and timed output writes under the compute node's
-`/tmp`, then copies each configuration's results back outside the measured
-pipeline. Check the filesystem recorded in `allocation.txt`: a RAM-backed
-`/tmp` also consumes memory and should be reported as such. All 30 configurations
-use the same staging policy. This measures the pipeline with staged local data,
-not shared-filesystem performance. Results are retained after each configuration
-so a later timeout does not discard already copied results.
-
-The 8 GiB request includes container startup, staging/page cache, and model
-execution; it is not an 8 GiB allowance solely for Python. Pegasus documents
-additional RAM requirements for Enroot images. An image or model that cannot
-fit must be reported as failing under this budget; the script never increases
-RAM automatically. Slurm's actual memory/swap enforcement depends on cluster
-configuration, and its CPU binding is different from Docker's CPU time quota.
-The runner rejects configurations whose visible CPU affinity count differs
-from the requested count instead of silently producing mislabeled results.
-
-The default 24-hour wall-clock limit is a starting point, not a runtime estimate.
-All steps stay on the same allocated node. Other jobs may still share the node;
-if your allocation permits exclusive-node CPU experiments, use
-`sbatch --exclusive ...` with the same script. The memory request remains 8 GiB.
-For independent repeats, record the node/CPU model, keep the image and inputs
-fixed, and compare variability across jobs. Download results because scratch
-storage is not backed up. The named container may remain on the compute node
-after completion according to cluster cleanup policy; the script removes its
-temporary working directory.
-
-Pegasus references: [software stack](https://pegasus.dfki.de/docs/slurm-cluster/software-stack/),
-[building images](https://pegasus.dfki.de/docs/slurm-cluster/custom-software/),
-[resource allocation](https://pegasus.dfki.de/docs/slurm-cluster/resource-allocation/).
-Runtime references: [Pyxis container reuse](https://github.com/NVIDIA/pyxis),
-[Slurm step resource limits](https://slurm.schedmd.com/srun.html),
-[Micromamba and Podman](https://micromamba-docker.readthedocs.io/en/stable/quick_start.html).
+Inputs and timed outputs are staged under node-local `/tmp`. The 8 GiB budget
+includes container and staging overhead; RAM is never increased automatically.
+Keep the image and inputs fixed across repeats, and copy results off scratch
+storage for safekeeping.
 
 ## Sources of truth
 
