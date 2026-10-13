@@ -24,3 +24,5 @@ dependencies:
       - numpy==1.26.4
       - pyarrow==23.0.1
       - tensorflow==2.20.0
+      - tf-keras>=2.20,<2.21
+      - transformers>=4.57,<5

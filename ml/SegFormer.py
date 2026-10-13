@@ -46,6 +46,20 @@ class SegFormer:
         )
         self.model.load_weights(weights_path)
 
+    @tf.function(
+        input_signature=[
+            tf.TensorSpec([None, 3, TILE_SIZE, TILE_SIZE], tf.float32),
+            tf.TensorSpec([2], tf.int32),
+        ]
+    )
+    def infer_masks(self, pixel_values: tf.Tensor, output_size: tf.Tensor) -> tf.Tensor:
+        """Reuse one graph for forward inference and tile-sized uint8 masks."""
+        outputs = self.model(pixel_values=pixel_values, training=False)
+        logits = tf.transpose(outputs.logits, perm=(0, 2, 3, 1))
+        logits = tf.image.resize(logits, output_size, method="bilinear")
+        masks = tf.argmax(logits, axis=-1)
+        return tf.cast(masks * 255, tf.uint8)
+
 
 def load_segformer(weights_path: str | PathLike[str]) -> SegFormer:
     """Build MiT-B5 and load the fine-tuned SegFormer weights."""
@@ -58,7 +72,14 @@ def run_segformer_inference(
     batch_size: int,
     timings: InferenceTimings | None = None,
 ) -> list[ImageArray]:
-    """Run batched SegFormer inference and return tile-sized binary masks."""
+    """Preprocess tiles and run graph inference to produce binary uint8 masks.
+
+    The image processor retains its existing resize, rescale, and normalization.
+    The graph accepts float32 NCHW batches with a variable batch dimension, so
+    partial batches reuse its trace. Output size is a tensor to avoid retracing
+    for different tile dimensions. Timings separate image processing, completed
+    graph execution and output download, and mask collection.
+    """
     if batch_size < 1:
         raise ValueError("batch_size must be at least 1")
 
@@ -70,19 +91,16 @@ def run_segformer_inference(
             images=tile_batch,
             return_tensors="tf",
         )
+        output_size = tf.convert_to_tensor(tile_batch[0].shape[:2], dtype=tf.int32)
         if timings is not None:
             timings.preprocessing_seconds += time.perf_counter() - started
 
         started = time.perf_counter()
-        outputs = model.model(pixel_values=inputs["pixel_values"], training=False)
+        masks = model.infer_masks(inputs["pixel_values"], output_size).numpy()
         if timings is not None:
             timings.model_forward_seconds += time.perf_counter() - started
 
         started = time.perf_counter()
-        logits = tf.transpose(outputs.logits, perm=(0, 2, 3, 1))
-        logits = tf.image.resize(logits, tile_batch[0].shape[:2], method="bilinear")
-        masks = tf.argmax(logits, axis=-1)
-        masks = (masks * 255).numpy().astype(np.uint8)
         all_masks.extend(masks)
         if timings is not None:
             timings.postprocessing_seconds += time.perf_counter() - started

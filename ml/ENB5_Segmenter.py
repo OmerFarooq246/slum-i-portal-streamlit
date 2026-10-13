@@ -109,6 +109,14 @@ class EfficientNetB5_Segmenter(keras.Model):
         decoder_output = self.decoder(encoder_outputs)
         return decoder_output
 
+    @tf.function(input_signature=[tf.TensorSpec([None, TILE_SIZE, TILE_SIZE, 3], tf.uint8)])
+    def infer_masks(self, batch: tf.Tensor) -> tf.Tensor:
+        """Reuse one graph for normalization, forward inference, and uint8 masks."""
+        normalized = tf.cast(batch, tf.float32) / 255.0
+        predictions = self(normalized, training=False)
+        masks = tf.argmax(predictions, axis=-1)
+        return tf.cast(masks * 255, tf.uint8)
+
 
 class EfficientNet_Segmenter_Config:
     def __init__(
