@@ -10,9 +10,9 @@
 The repository installs a local `pre-push` hook that rejects direct pushes to `main`. GitHub branch
 protection or a repository ruleset should also require pull requests and successful CI checks.
 
-Follow the technical requirements in [Data pipeline](docs/data-pipeline.md) and
-[Development](docs/development.md) when preparing a pull request. See [README.md](README.md) for the
-project overview and quick start.
+Follow [README.md](README.md) for the project overview, setup, shared segmentation pipeline,
+and development checks. For benchmark inputs, protocols, and execution instructions, see
+[Benchmark documentation](benchmarks/README.md).
 
 ## Branch names
 
@@ -75,7 +75,7 @@ Examples:
 feat(loader): add RGB augmentation pipeline
 fix(config): calculate test split percentage correctly
 test(data): cover malformed metadata rows
-docs(setup): explain Nutrition5K directory layout
+docs(setup): explain segmentation model setup
 ci(quality): enforce clean notebook outputs
 chore(deps): update TensorFlow lock
 ```
