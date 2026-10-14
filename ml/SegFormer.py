@@ -32,9 +32,12 @@ class SegFormer:
         id2label = {0: "non_slum", 1: "slum"}
         label2id = {label: label_id for label_id, label in id2label.items()}
         base_config = str(base_config_path)
-        self.image_processor = SegformerImageProcessor.from_pretrained(base_config)
+        self.image_processor = SegformerImageProcessor.from_pretrained(
+            base_config, local_files_only=True
+        )
         config = SegformerConfig.from_pretrained(
             base_config,
+            local_files_only=True,
             num_labels=2,
             id2label=id2label,
             label2id=label2id,

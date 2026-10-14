@@ -50,7 +50,7 @@ docker compose -f benchmarks/compose.segformer.yaml run --rm benchmark
 
 The SegFormer adapter reconstructs the same two-class MiT-B5 architecture used for training and then calls `load_weights()` with the fine-tuned weights. The `models/mit-b5/` directory only needs `config.json` and `preprocessor_config.json`; a second copy of the base model weights is unnecessary. The configuration, processor metadata, and fine-tuned weights must be local because benchmark containers run without network access.
 
-Transformers 4.57.3 uses the legacy TensorFlow Keras API for this model, so the benchmark environment pins `tf-keras==2.20.1` alongside `tensorflow==2.20.0`.
+Transformers 4.57.6 uses the legacy TensorFlow Keras API for this model, so the benchmark environment pins `tf-keras==2.20.1` alongside `tensorflow==2.20.0`.
 
 Both Compose configurations supply their model and runtime arguments explicitly. Do not run the ARM64 protocol through AMD64 emulation.
 
