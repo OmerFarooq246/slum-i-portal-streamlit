@@ -1,0 +1,31 @@
+{
+  "protocol": "Local-raster segmentation system benchmark",
+  "model": "enb5_seg_islamabad",
+  "cpu_limit": 2.0,
+  "platform": "Linux-7.0.14-linuxkit-aarch64-with-glibc2.41",
+  "architecture": "aarch64",
+  "python_version": "3.11.17",
+  "tensorflow_version": "2.20.0",
+  "tile_size": 512,
+  "batch_size": 5,
+  "warmup_runs_per_roi": 1,
+  "measured_runs_per_roi": 5,
+  "crop_x": 0,
+  "crop_y": 0,
+  "source_raster": "benchmarks/data/raster_benchmark.tif",
+  "source_raster_sha256": "2cbfc440939bcfac8101f6347dec83e4bd53363b50b988a2d1d856a9267bb8f8",
+  "weights_path": "models/enb5_seg_islamabad.h5",
+  "weights_sha256": "1dfba70ffa4a8fd3d8af917a7d5901c6f7566bd2f4246af8602b7b5eb1ba7829",
+  "supporting_artifacts": {},
+  "tiles_per_roi": {
+    "small": 4,
+    "medium": 16,
+    "large": 36
+  },
+  "model_initialization_timed": false,
+  "imagery_acquisition_timed": false,
+  "tensorflow_synchronous_execution": true,
+  "detected_cpu_limit": 2.0,
+  "detected_ram_limit_bytes": 6442450944,
+  "detected_cpu_affinity_count": 6
+}

@@ -18,7 +18,12 @@ ImageArray = NDArray[np.uint8]
 
 @dataclass
 class InferenceTimings:
-    """Accumulated timings for the operations inside ``run_inference``."""
+    """Batch preparation, graph execution, and mask collection timings.
+
+    ``model_forward_seconds`` includes all operations inside the inference graph
+    and synchronization when downloading its uint8 output. ENB5 normalization
+    runs inside the graph; SegFormer image processing is timed as preprocessing.
+    """
 
     preprocessing_seconds: float = 0.0
     model_forward_seconds: float = 0.0
@@ -79,17 +84,19 @@ def slice_image(raster: Any, tile_size: int) -> tuple[list[Any], list[str]]:
 
 
 def run_inference(
-    model: Any,
+    model: EfficientNetB5_Segmenter,
     tiles: list[Any],
     batch_size: int,
     timings: InferenceTimings | None = None,
 ) -> list[ImageArray]:
     """Run normalized, batched inference and return binary uint8 masks.
 
-    When ``timings`` is supplied, durations are accumulated separately for batch
-    preparation, the model forward calls, and mask postprocessing. The benchmark
-    enables synchronous TensorFlow execution before calling this function so that
-    forward-call timings represent completed CPU work.
+    Tiles must be uint8 RGB arrays of shape (TILE_SIZE, TILE_SIZE, 3). The model's
+    ``infer_masks`` graph normalizes the batch, runs the forward pass, and converts
+    class predictions to masks. Its variable batch dimension also accepts the
+    final partial batch.
+    Timings separate batch assembly, completed graph execution (including output
+    download), and mask collection. The first graph call includes tracing time.
     """
     if batch_size < 1:
         raise ValueError("batch_size must be at least 1")
@@ -97,18 +104,16 @@ def run_inference(
     all_masks = []
     for index in range(0, len(tiles), batch_size):
         started = time.perf_counter()
-        batch = np.stack(tiles[index : index + batch_size]).astype(np.float32) / 255.0
+        batch = np.stack(tiles[index : index + batch_size])
         if timings is not None:
             timings.preprocessing_seconds += time.perf_counter() - started
 
         started = time.perf_counter()
-        predictions = model(batch, training=False)
+        masks = model.infer_masks(batch).numpy()
         if timings is not None:
             timings.model_forward_seconds += time.perf_counter() - started
 
         started = time.perf_counter()
-        masks = tf.argmax(predictions, axis=-1)
-        masks = (masks * 255).numpy().astype(np.uint8)
         all_masks.extend(masks)
         if timings is not None:
             timings.postprocessing_seconds += time.perf_counter() - started

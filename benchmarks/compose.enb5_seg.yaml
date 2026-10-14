@@ -11,11 +11,15 @@ services:
       - --model
       - enb5_seg_islamabad
       - --batch-size
-      - "5"
+      - "1"
       - --cpu-limit
       - "2"
+      - --measured-runs
+      - "5"
+      - --warmup-runs
+      - "1"
       - --results-dir
-      - benchmarks/results_10_mruns/enb5_seg_islamabad_cpu2_b5_new
+      - benchmarks/results_5_mruns/enb5_seg_islamabad_cpu2_b1_new
     cpus: 2.0
     mem_limit: 6g
     memswap_limit: 6g
@@ -23,4 +27,4 @@ services:
     volumes:
       - ../models:/app/models:ro
       - ./data:/app/benchmarks/data:ro
-      - ./results_10_mruns:/app/benchmarks/results_10_mruns
+      - ./results_5_mruns:/app/benchmarks/results_5_mruns

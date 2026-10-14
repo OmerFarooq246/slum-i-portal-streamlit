@@ -24,6 +24,6 @@ coverage:
 	pytest --cov --cov-report=term-missing --cov-report=xml
 
 audit:
-	python -m pip_audit
+	python scripts/audit_dependencies.py
 
 check: check-text lint typecheck test
