@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import tensorflow as tf
 from transformers import (
@@ -6,15 +8,20 @@ from transformers import (
     TFSegformerForSemanticSegmentation,
 )
 
-from ml.SegFormer import SEGFORMER_BASE_CONFIG_PATH, SegFormer, run_segformer_inference
+from config.settings import TILE_SIZE
+from ml.SegFormer import SegFormer, run_segformer_inference
 from ml.segmentation_core import InferenceTimings
 
 
-def test_segformer_graph_matches_eager_and_reuses_partial_batch_trace() -> None:
-    # Exercise the real processor and model without a checkpoint or network access.
+def test_segformer_graph_matches_eager_and_reuses_partial_batch_trace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # A clean checkout has no ignored models/ artifacts. Exercise the real
+    # processor and model from an empty directory without files or downloads.
+    monkeypatch.chdir(tmp_path)
     segmenter = SegFormer.__new__(SegFormer)
-    segmenter.image_processor = SegformerImageProcessor.from_pretrained(
-        str(SEGFORMER_BASE_CONFIG_PATH), local_files_only=True
+    segmenter.image_processor = SegformerImageProcessor(
+        size={"height": TILE_SIZE, "width": TILE_SIZE}
     )
     segmenter.model = TFSegformerForSemanticSegmentation(
         SegformerConfig(
