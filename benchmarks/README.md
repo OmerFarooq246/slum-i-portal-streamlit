@@ -1,6 +1,31 @@
 # Segmentation benchmark
 
-This benchmark measures the portal's local-raster segmentation path without imagery acquisition or Streamlit rendering. The portal and benchmark use the same in-memory operations from `ml/segmentation_core.py`.
+This benchmark measures the portal's local-raster segmentation path without imagery acquisition or Streamlit rendering. By default, the portal and benchmark use the sequential windowed path in `ml/raster_inference.py`, with model inference from `ml/segmentation_core.py` or `ml/SegFormer.py`.
+
+## Streaming and baseline comparison
+
+`--pipeline streaming` (default) reads at most one batch of TIFF windows, infers it,
+and writes predictions into a tiled, compressed `mask.tif`. Boundary windows shift
+backwards without padding. Overlapping predictions use the original pixelwise
+maximum merge. Source CRS and the crop transform are preserved. The GDAL block
+cache is limited to 32 MiB during inference and preview generation.
+
+`--pipeline in_memory` retains the original implementation as a baseline. Use
+separate result directories (the default is `results_10_mruns/<model>/<pipeline>`); pipeline mode is recorded
+in metadata and raw results. Historical runs used the in-memory path.
+
+In streaming mode, `raster_load_preprocess_ms` sums batch window reads,
+`inference_ms` sums inference calls, and `stitching_ms` includes mask window reads,
+merges, and writes. `tiling_ms` is zero because window enumeration is lazy and not
+separately timed. File setup, closing/compression, and enumeration overhead remain
+included in total latency. The model timing definitions are unchanged.
+
+Streaming PNG outputs are previews capped at 1024 pixels on the longest side;
+`mask.tif` contains the full-resolution mask. The baseline generates full-resolution
+PNGs, so end-to-end latency comparisons include this output-generation difference.
+The benchmark excludes downloading imagery, portal rendering, and downloads.
+In the portal, ZIP archives are created on disk only on request; Streamlit still
+loads the requested archive into memory to serve its download.
 
 ## Inputs
 
@@ -114,5 +139,5 @@ storage for safekeeping.
 - Per-model runtime configuration: `compose.enb5_seg.yaml`, `compose.segformer.yaml`
 - Container dependencies: `environment.yml`
 - Raster requirements: `data/README.md`
-- Shared portal and benchmark operations: `../ml/segmentation_core.py`
+- Shared portal and benchmark operations: `../ml/raster_inference.py` and `../ml/segmentation_core.py`
 - Pegasus CPU/batch sweep and fixed 8 GiB allocation: `pegasus_sweep.sbatch`

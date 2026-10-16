@@ -27,6 +27,7 @@ from PIL import Image
 from rasterio.windows import Window
 
 from config.settings import TILE_SIZE
+from ml.raster_inference import PREVIEW_MAX_SIZE, infer_raster, raster_previews
 from ml.SegFormer import SEGFORMER_BASE_CONFIG_PATH, load_segformer, run_segformer_inference
 from ml.segmentation_core import (
     InferenceTimings,
@@ -145,10 +146,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        help="Output directory; defaults to benchmarks/results_10_mruns/<model>",
+        help="Output directory; defaults to benchmarks/results_10_mruns/<model>/<pipeline>",
     )
     parser.add_argument("--crop-x", type=int, default=0, help="Deterministic left pixel offset")
     parser.add_argument("--crop-y", type=int, default=0, help="Deterministic top pixel offset")
+    parser.add_argument(
+        "--pipeline",
+        choices=("streaming", "in_memory"),
+        default="streaming",
+        help="Streaming portal path or original in-memory baseline",
+    )
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--warmup-runs", type=int, default=3)
     parser.add_argument("--measured-runs", type=int, default=5, help="At least 5 runs per ROI")
@@ -161,7 +168,7 @@ def selected_weights_path(args: argparse.Namespace) -> Path:
 
 
 def selected_results_dir(args: argparse.Namespace) -> Path:
-    requested = args.results_dir or RESULTS_ROOT / args.model
+    requested = args.results_dir or RESULTS_ROOT / args.model / args.pipeline
     if requested.is_absolute():
         raise ValueError("Results directory must be relative to the repository root")
     return requested
@@ -236,7 +243,7 @@ def load_raster_roi(raster_path: Path, crop_x: int, crop_y: int, pixels: int) ->
     return np.transpose(data[:3], (1, 2, 0)).astype(np.uint8)
 
 
-def generate_outputs(image: tf.Tensor, mask: ImageArray, output_dir: Path) -> None:
+def generate_outputs(image: Any, mask: ImageArray, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     overlay = Image.fromarray(create_overlay_image(image, mask))
     Image.fromarray(mask).save(output_dir / "mask.png", format="PNG")
@@ -253,7 +260,22 @@ def run_pipeline(
     batch_size: int,
     work_dir: Path,
     inference_runner: InferenceRunner = run_inference,
+    pipeline: str = "streaming",
 ) -> dict[str, float]:
+    if pipeline == "streaming":
+        return run_streaming_pipeline(
+            raster_path,
+            model,
+            roi_name,
+            grid_size,
+            crop_x,
+            crop_y,
+            batch_size,
+            work_dir,
+            inference_runner,
+        )
+    if pipeline != "in_memory":
+        raise ValueError("unknown pipeline")
     with PeakMemorySampler() as sampler:
         total_start = time.perf_counter()
 
@@ -297,6 +319,51 @@ def run_pipeline(
         "total_latency_ms": total_latency * 1_000,
         "tiles_per_second": tile_count / inference_latency,
         "model_tiles_per_second": tile_count / inference_timings.model_forward_seconds,
+        "peak_process_memory_mb": sampler.peak_megabytes,
+    }
+
+
+def run_streaming_pipeline(
+    raster_path: Path,
+    model: Any,
+    roi_name: str,
+    grid_size: int,
+    crop_x: int,
+    crop_y: int,
+    batch_size: int,
+    work_dir: Path,
+    inference_runner: InferenceRunner,
+) -> dict[str, float]:
+    """Measure window reads, inference, disk stitching, and bounded portal previews."""
+    with PeakMemorySampler() as sampler:
+        started = time.perf_counter()
+        pixels = grid_size * TILE_SIZE
+        region = Window(crop_x, crop_y, pixels, pixels)
+        output_dir = work_dir / roi_name / "outputs"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        mask_path = output_dir / "mask.tif"
+        result = infer_raster(
+            raster_path, mask_path, model, batch_size, inference_runner, region=region
+        )
+        output_started = time.perf_counter()
+        image, mask = raster_previews(raster_path, mask_path, region=region)
+        generate_outputs(image, mask, output_dir)
+        output_seconds = time.perf_counter() - output_started
+        total_seconds = time.perf_counter() - started
+    return {
+        "raster_load_preprocess_ms": result.reading_seconds * 1_000,
+        "tiling_ms": 0.0,
+        "inference_preprocessing_ms": result.inference_timings.preprocessing_seconds * 1_000,
+        "model_forward_ms": result.inference_timings.model_forward_seconds * 1_000,
+        "inference_postprocessing_ms": result.inference_timings.postprocessing_seconds * 1_000,
+        "inference_ms": result.inference_seconds * 1_000,
+        "stitching_ms": result.writing_seconds * 1_000,
+        "output_generation_ms": output_seconds * 1_000,
+        "total_latency_ms": total_seconds * 1_000,
+        "tiles_per_second": result.tile_count / result.inference_seconds,
+        "model_tiles_per_second": (
+            result.tile_count / result.inference_timings.model_forward_seconds
+        ),
         "peak_process_memory_mb": sampler.peak_megabytes,
     }
 
@@ -389,6 +456,8 @@ def main() -> int:
 
     metadata: dict[str, Any] = {
         "protocol": "Local-raster segmentation system benchmark",
+        "pipeline": args.pipeline,
+        "preview_max_size": PREVIEW_MAX_SIZE if args.pipeline == "streaming" else None,
         "model": args.model,
         "cpu_limit": args.cpu_limit,
         "platform": platform.platform(),
@@ -440,6 +509,7 @@ def main() -> int:
                 args.batch_size,
                 work_dir,
                 model_adapter.infer,
+                args.pipeline,
             )
         for run_number in range(1, args.measured_runs + 1):
             print(f"Measured run {run_number}/{args.measured_runs}: {roi_name}", flush=True)
@@ -453,10 +523,12 @@ def main() -> int:
                 args.batch_size,
                 work_dir,
                 model_adapter.infer,
+                args.pipeline,
             )
             raw_rows.append(
                 {
                     "model": args.model,
+                    "pipeline": args.pipeline,
                     "roi": roi_name,
                     "run": run_number,
                     "width_px": grid_size * TILE_SIZE,

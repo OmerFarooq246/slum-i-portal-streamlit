@@ -8,6 +8,7 @@ dependencies:
   - ipyvuetify=1.11.3
   - leafmap>=0.35,<1
   - numpy=1.26.4
+  - rasterio>=1.4,<2
   - pillow>=12.3,<13
   - pip
   - streamlit>=1.54,<2

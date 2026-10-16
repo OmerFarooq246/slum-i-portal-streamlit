@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import numpy as np
+import rasterio
 import tensorflow as tf
+from rasterio.transform import from_origin
 from transformers import (
     SegformerConfig,
     SegformerImageProcessor,
@@ -9,8 +11,9 @@ from transformers import (
 )
 
 from config.settings import TILE_SIZE
+from ml.raster_inference import infer_raster
 from ml.SegFormer import SegFormer, run_segformer_inference
-from ml.segmentation_core import InferenceTimings
+from ml.segmentation_core import InferenceTimings, merge_masks, slice_image
 
 
 def test_segformer_graph_matches_eager_and_reuses_partial_batch_trace(
@@ -54,4 +57,24 @@ def test_segformer_graph_matches_eager_and_reuses_partial_batch_trace(
     resized_tile = rng.integers(0, 256, (48, 32, 3), dtype=np.uint8)
     resized_masks = run_segformer_inference(segmenter, [resized_tile], batch_size=2)
     assert resized_masks[0].shape == (48, 32)
+    assert segmenter.infer_masks.experimental_get_tracing_count() == trace_count
+
+    image = rng.integers(0, 256, (32, 65, 3), dtype=np.uint8)
+    tiles, names = slice_image(image, 32)
+    expected_stitched = merge_masks(run_segformer_inference(segmenter, tiles, 2), names)
+    source, output = tmp_path / "image.tif", tmp_path / "mask.tif"
+    with rasterio.open(
+        source,
+        "w",
+        driver="GTiff",
+        width=65,
+        height=32,
+        count=3,
+        dtype="uint8",
+        transform=from_origin(100, 200, 1, 1),
+    ) as dataset:
+        dataset.write(np.moveaxis(image, -1, 0))
+    infer_raster(source, output, segmenter, 2, run_segformer_inference, tile_size=32)
+    with rasterio.open(output) as dataset:
+        np.testing.assert_array_equal(dataset.read(1), expected_stitched)
     assert segmenter.infer_masks.experimental_get_tracing_count() == trace_count

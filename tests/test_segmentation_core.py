@@ -1,9 +1,14 @@
+from pathlib import Path
+
 import numpy as np
+import rasterio
 import tensorflow as tf
+from rasterio.transform import from_origin
 from tensorflow import keras
 
 from config.settings import TILE_SIZE
 from ml.ENB5_Segmenter import EfficientNetB5_Segmenter
+from ml.raster_inference import infer_raster
 from ml.segmentation_core import InferenceTimings, merge_masks, run_inference, slice_image
 
 
@@ -57,7 +62,7 @@ def test_run_inference_profiles_shared_batch_path() -> None:
     assert timings.postprocessing_seconds > 0
 
 
-def test_graph_matches_eager_masks_and_reuses_trace_for_partial_batches() -> None:
+def test_graph_matches_eager_masks_and_reuses_trace_for_partial_batches(tmp_path: Path) -> None:
     model = ThresholdModel()
     rng = np.random.default_rng(42)
     tiles = [
@@ -77,3 +82,22 @@ def test_graph_matches_eager_masks_and_reuses_trace_for_partial_batches() -> Non
     assert all(mask.dtype == np.uint8 for mask in actual)
     assert model.infer_masks is inference
     assert inference.experimental_get_tracing_count() == trace_count == 1
+
+    # The disk-backed path uses the same graph and preserves the partial batch.
+    image = np.concatenate(tiles, axis=1)
+    source, output = tmp_path / "image.tif", tmp_path / "mask.tif"
+    with rasterio.open(
+        source,
+        "w",
+        driver="GTiff",
+        height=TILE_SIZE,
+        width=3 * TILE_SIZE,
+        count=3,
+        dtype="uint8",
+        transform=from_origin(100, 200, 1, 1),
+    ) as dataset:
+        dataset.write(np.moveaxis(image, -1, 0))
+    infer_raster(source, output, model, batch_size=2)
+    with rasterio.open(output) as dataset:
+        np.testing.assert_array_equal(dataset.read(1), np.concatenate(expected, axis=1))
+    assert inference.experimental_get_tracing_count() == 1

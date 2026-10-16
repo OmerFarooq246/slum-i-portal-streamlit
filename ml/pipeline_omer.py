@@ -3,21 +3,15 @@ from pathlib import Path
 from typing import Any
 
 import leafmap
-import numpy as np
+import rasterio
 import streamlit as st
-from numpy.typing import NDArray
 from PIL import Image
 
 from config.models import ModelConfig
 from config.settings import FIXED_ZOOM_LEVEL, TILE_SIZE
 from ml.ENB5_Segmenter import EfficientNetB5_Segmenter
-from ml.segmentation_core import (
-    create_overlay_image,
-    load_enb5_seg,
-    merge_masks,
-    run_inference,
-    slice_image,
-)
+from ml.raster_inference import infer_raster, raster_previews
+from ml.segmentation_core import create_overlay_image, load_enb5_seg
 from utils.files import create_session_dir
 
 PolygonCoords = list[list[float]]
@@ -40,12 +34,11 @@ def perform_segmentation(
     try:
         session_id, session_dir = create_session_dir()
 
-        raster_np, bbox, requested_size = _download_raster(polygon_coords, session_dir)
-        original_height, original_width = raster_np.shape[:2]
-
-        tiles, tile_names = slice_image(raster_np, TILE_SIZE)
-        masks = run_inference(model, tiles, model_config.batch_size)
-        mask_merged = merge_masks(masks, tile_names)
+        raster_path, bbox, requested_size = _download_raster(polygon_coords, session_dir)
+        mask_path = raster_path.parent / "mask.tif"
+        inference = infer_raster(raster_path, mask_path, model, model_config.batch_size)
+        original_height, original_width = inference.height, inference.width
+        raster_np, mask_merged = raster_previews(raster_path, mask_path)
         requested_width, requested_height = requested_size
         bbox_expanded = requested_width < TILE_SIZE or requested_height < TILE_SIZE
         size_details = f"Raster: {original_width} x {original_height} px"
@@ -54,7 +47,7 @@ def perform_segmentation(
                 f"Original requested raster: {requested_width} x {requested_height} px; "
                 f"expanded raster: {original_width} x {original_height} px"
             )
-        print(f"[segmentation] {size_details}; tiles processed: {len(tiles)}", flush=True)
+        print(f"[segmentation] {size_details}; tiles processed: {inference.tile_count}", flush=True)
 
         overlay = create_overlay_image(raster_np, mask_merged)
 
@@ -63,8 +56,12 @@ def perform_segmentation(
             "session_dir": session_dir,
             "primary_result": {
                 "original_image": Image.fromarray(raster_np),
-                "stitched_mask": Image.fromarray(mask_merged.astype(np.uint8)),
-                "overlay_image": Image.fromarray(overlay.astype(np.uint8)),
+                "stitched_mask": Image.fromarray(mask_merged),
+                "overlay_image": Image.fromarray(overlay),
+                "tile_count": inference.tile_count,
+                "raster_path": str(raster_path),
+                "mask_path": str(mask_path),
+                "raster_size": (original_width, original_height),
             },
             "bbox": bbox,
             "polygon_coords": polygon_coords,
@@ -83,7 +80,7 @@ def perform_segmentation(
 
 def _download_raster(
     polygon_coords: PolygonCoords, session_dir: str
-) -> tuple[NDArray[np.uint8], list[float], tuple[int, int]]:
+) -> tuple[Path, list[float], tuple[int, int]]:
     date_dir = Path(session_dir) / "analysis"
     date_dir.mkdir(parents=True, exist_ok=True)
 
@@ -107,7 +104,6 @@ def _download_raster(
     )
 
     tiff_path = date_dir / "raster.tif"
-    Image.MAX_IMAGE_PIXELS = None
     while True:
         leafmap.map_tiles_to_geotiff(
             output=str(tiff_path),
@@ -119,12 +115,10 @@ def _download_raster(
             options=["BIGTIFF=YES"],
         )
 
-        with Image.open(tiff_path) as raster:
-            raster_rgb = np.array(raster.convert("RGB"))
-
-        raster_height, raster_width = raster_rgb.shape[:2]
+        with rasterio.open(tiff_path) as raster:
+            raster_height, raster_width = raster.height, raster.width
         if raster_height >= TILE_SIZE and raster_width >= TILE_SIZE:
-            return raster_rgb, bbox, requested_size
+            return tiff_path, bbox, requested_size
 
         bbox = _expand_bbox_for_raster_shortfall(
             bbox,
