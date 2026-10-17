@@ -27,6 +27,8 @@ jobs:
         with:
           environment-file: environment.yml
           environment-name: slum-i
+          # Checks use the initialized Bash shell, not micromamba-shell.
+          generate-run-shell: false
           cache-environment: true
           cache-downloads: true
       - run: make check

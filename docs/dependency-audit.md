@@ -61,6 +61,10 @@ Other GDAL advisories and other package findings, including
 audit failures. Exceptions are passed to pip-audit as advisory IDs, not as a
 blanket exclusion of the GDAL package.
 
+The application environment installs `multidict>=6.9.1,<7` through pip because
+conda-forge could not resolve this patched requirement in the failing Linux CI
+run. Keep the patched minimum when changing its installation source.
+
 Revisit this risk acceptance when changing raster sources or input handling, or
 when testing a compatible patched GDAL environment. Remove the exceptions and
 update the pin after that environment has passed the raster tests and a real
