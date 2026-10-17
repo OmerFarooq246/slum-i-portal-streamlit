@@ -54,6 +54,9 @@ make check
 | `make audit` | Audit installed Python packages for known vulnerabilities |
 | `make check` | Run linting, type checking, and tests |
 
+The coverage target passes `--cov-config=pyproject.toml` explicitly so test
+subprocesses keep the same branch-coverage settings when they change directories.
+
 Runtime and development dependencies are declared in `environment.yml`. Tool configuration remains in `pyproject.toml`. The benchmark container uses the smaller `benchmarks/environment.yml` environment.
 
 The installed pre-push hook rejects direct pushes to `main`. Both pre-commit and pre-push reject em dashes in tracked text files.

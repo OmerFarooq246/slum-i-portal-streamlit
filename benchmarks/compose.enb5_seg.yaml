@@ -19,7 +19,7 @@ services:
       - --warmup-runs
       - "1"
       - --results-dir
-      - benchmarks/results_5_mruns/enb5_seg_islamabad_cpu2_b1_new
+      - benchmarks/results_5_mruns_stream/enb5_seg_islamabad_cpu2_b1
     cpus: 2.0
     mem_limit: 6g
     memswap_limit: 6g
@@ -27,4 +27,4 @@ services:
     volumes:
       - ../models:/app/models:ro
       - ./data:/app/benchmarks/data:ro
-      - ./results_5_mruns:/app/benchmarks/results_5_mruns
+      - ./results_5_mruns_stream:/app/benchmarks/results_5_mruns_stream

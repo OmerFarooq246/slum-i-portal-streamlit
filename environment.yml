@@ -4,10 +4,11 @@ channels:
 dependencies:
   - python=3.11
   - folium>=0.17,<1
-  - gdal>=3.9,<4
+  - gdal=3.12.3
   - ipyvuetify=1.11.3
   - leafmap>=0.35,<1
   - numpy=1.26.4
+  - rasterio>=1.4,<2
   - pillow>=12.3,<13
   - pip
   - streamlit>=1.54,<2
@@ -19,6 +20,8 @@ dependencies:
   - pytest-cov>=6.2,<7
   - ruff>=0.11,<1
   - pip:
+      # The patched release is available on PyPI before conda-forge.
+      - multidict>=6.9.1,<7
       # Use wheels for TensorFlow and PyArrow together. The conda-forge
       # PyArrow native libraries conflict with TensorFlow on Apple Silicon.
       - numpy==1.26.4

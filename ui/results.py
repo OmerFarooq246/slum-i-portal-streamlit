@@ -4,6 +4,7 @@ import io
 import os
 import shutil
 import zipfile
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -15,9 +16,9 @@ def display_results_summary() -> None:
     for session_id, result in list(st.session_state.processing_results.items()):
         st.markdown(f"**Analysis · {session_id[:8]}**")
         if "primary_result" in result:
-            tiles = result["primary_result"].get("tiles_info")
-            if tiles is not None:
-                st.caption(f"{len(tiles)} tiles processed")
+            tile_count = result["primary_result"].get("tile_count")
+            if tile_count is not None:
+                st.caption(f"{tile_count} tiles processed")
         if result.get("bbox_expanded"):
             width, height = result["requested_size"]
             st.caption(
@@ -30,14 +31,18 @@ def display_results_summary() -> None:
             if st.button("Remove", key=f"remove_{session_id}", use_container_width=True):
                 _cleanup_session(session_id, result)
         with c2:
-            st.download_button(
-                label="Download",
-                data=_build_zip(session_id, result),
-                file_name=f"analysis_{session_id[:8]}.zip",
-                mime="application/zip",
-                key=f"dl_{session_id}",
-                use_container_width=True,
-            )
+            if st.button("Prepare download", key=f"prepare_{session_id}", use_container_width=True):
+                archive = _build_zip(session_id, result)
+                with archive.open("rb") as handle:
+                    st.download_button(
+                        label="Download ZIP",
+                        data=handle,
+                        file_name=archive.name,
+                        mime="application/zip",
+                        key=f"dl_{session_id}",
+                        on_click="ignore",
+                        use_container_width=True,
+                    )
 
         st.markdown("---")
 
@@ -51,6 +56,11 @@ def display_detection_results() -> None:
 
 
 def _display_date_result(date_result: dict[str, Any]) -> None:
+    if "raster_size" in date_result:
+        width, height = date_result["raster_size"]
+        st.caption(
+            f"Preview images; full-resolution {width} x {height} px TIFFs are in the download."
+        )
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -69,10 +79,14 @@ def _display_date_result(date_result: dict[str, Any]) -> None:
             st.image(date_result["overlay_image"], use_container_width=True)
 
 
-def _build_zip(session_id: str, result: dict[str, Any]) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+def _build_zip(session_id: str, result: dict[str, Any]) -> Path:
+    """Build an archive on disk only when requested, including full-resolution TIFFs."""
+    archive = Path(result["session_dir"]) / f"analysis_{session_id[:8]}.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
         pr = result.get("primary_result", {})
+        for key, name in [("raster_path", "original.tif"), ("mask_path", "mask.tif")]:
+            if pr.get(key):
+                zf.write(pr[key], arcname=name)
         for fname, img_key in [
             (f"overlay_{session_id[:8]}.png", "overlay_image"),
             (f"original_{session_id[:8]}.png", "original_image"),
@@ -82,8 +96,7 @@ def _build_zip(session_id: str, result: dict[str, Any]) -> bytes:
                 b = io.BytesIO()
                 pr[img_key].save(b, format="PNG")
                 zf.writestr(fname, b.getvalue())
-    buf.seek(0)
-    return buf.getvalue()
+    return archive
 
 
 def _cleanup_session(session_id: str, result: dict[str, Any]) -> None:
