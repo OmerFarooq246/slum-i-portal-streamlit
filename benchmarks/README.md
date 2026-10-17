@@ -83,6 +83,18 @@ The runner defaults to three excluded warm-up runs and five measured runs per RO
 
 Ten-run results are stored in `results_10_mruns/`. Five-run results are preserved in `results_5_mruns/` with their original raw measurements and mean-based summaries. The `enb5_seg_islamabad_cpu2_b1_new` and `enb5_seg_islamabad_cpu2_b5_new` directories record graph-inference runs for comparison with the corresponding `enb5_seg_islamabad_b1` and `enb5_seg_islamabad_b5` baselines. Their metadata matches except for CPU affinity (six available CPUs versus four previously, with the same two-CPU quota), which limits attribution of the observed gains solely to graph execution. Generated PNG artifacts are excluded from Git.
 
+The latest local ENB5 streaming batch-one run is saved in
+`results_5_mruns_stream/enb5_seg_islamabad_cpu2_b1/`; the local Compose command
+currently selects this configuration. Mean peak RSS is 1853, 1856, and 1877 MiB
+for small, medium, and large ROIs, with total latency of 12.82, 49.70, and 112.07
+seconds. Compared with the saved streaming batch-five session, this is about
+60-65% less peak RSS. Against the historical in-memory graph batch-one session,
+peak RSS changes by +3.9%, +2.1%, and -1.0%, respectively. These separate sessions
+support reducing inference batch size on the local two-CPU setup, but do not
+establish a substantial streaming memory benefit at the tested ROI sizes. The
+pipelines also generate different PNG resolutions, as described above. The
+Pegasus sweep retains its independent CPU and batch-size matrix.
+
 ## Pegasus CPU/batch sweep
 
 `pegasus_sweep.sbatch` runs both models across CPUs **2, 4, 6** and batch sizes

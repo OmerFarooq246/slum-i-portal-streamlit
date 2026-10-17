@@ -11,7 +11,7 @@ services:
       - --model
       - enb5_seg_islamabad
       - --batch-size
-      - "5"
+      - "1"
       - --cpu-limit
       - "2"
       - --measured-runs
@@ -19,7 +19,7 @@ services:
       - --warmup-runs
       - "1"
       - --results-dir
-      - benchmarks/results_5_mruns_stream/enb5_seg_islamabad_cpu2_b5
+      - benchmarks/results_5_mruns_stream/enb5_seg_islamabad_cpu2_b1
     cpus: 2.0
     mem_limit: 6g
     memswap_limit: 6g
