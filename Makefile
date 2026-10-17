@@ -21,7 +21,7 @@ test:
 	pytest
 
 coverage:
-	pytest --cov --cov-report=term-missing --cov-report=xml
+	pytest --cov --cov-config=pyproject.toml --cov-report=term-missing --cov-report=xml
 
 audit:
 	python scripts/audit_dependencies.py
