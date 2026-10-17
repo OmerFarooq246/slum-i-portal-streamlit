@@ -4,9 +4,10 @@ channels:
 dependencies:
   - python=3.11
   - folium>=0.17,<1
-  - gdal>=3.9,<4
+  - gdal=3.12.3
   - ipyvuetify=1.11.3
   - leafmap>=0.35,<1
+  - multidict>=6.9.1,<7
   - numpy=1.26.4
   - rasterio>=1.4,<2
   - pillow>=12.3,<13
