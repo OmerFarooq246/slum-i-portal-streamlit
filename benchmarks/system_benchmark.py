@@ -148,6 +148,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Output directory; defaults to benchmarks/results_10_mruns/<model>/<pipeline>",
     )
+    parser.add_argument(
+        "--work-dir",
+        type=Path,
+        help="Directory for timed artifacts; defaults to <results-dir>/artifacts",
+    )
     parser.add_argument("--crop-x", type=int, default=0, help="Deterministic left pixel offset")
     parser.add_argument("--crop-y", type=int, default=0, help="Deterministic top pixel offset")
     parser.add_argument(
@@ -375,6 +380,17 @@ def write_csv(path: Path, rows: Sequence[dict[str, Any]], fieldnames: Iterable[s
         writer.writerows(rows)
 
 
+def append_raw_run(path: Path, row: dict[str, Any], *, run_count: int) -> None:
+    """Flush each measurement to durable storage, replacing results on a new run."""
+    with path.open("w" if run_count == 1 else "a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(row))
+        if run_count == 1:
+            writer.writeheader()
+        writer.writerow(row)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
 def summarize(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     summary: list[dict[str, Any]] = []
     for roi_name, grid_size in ROI_SPECS:
@@ -448,7 +464,7 @@ def main() -> int:
     results_dir = selected_results_dir(args)
     validate_inputs(args, weights_path)
     results_dir.mkdir(parents=True, exist_ok=True)
-    work_dir = results_dir / "artifacts"
+    work_dir = args.work_dir or results_dir / "artifacts"
 
     tf.config.threading.set_intra_op_parallelism_threads(max(1, int(args.cpu_limit)))
     tf.config.threading.set_inter_op_parallelism_threads(1)
@@ -543,9 +559,9 @@ def main() -> int:
                     **metrics,
                 }
             )
+            # Persist outside timed work so interruption retains every completed run.
+            append_raw_run(results_dir / "raw_runs.csv", raw_rows[-1], run_count=len(raw_rows))
 
-    raw_fields = list(raw_rows[0].keys())
-    write_csv(results_dir / "raw_runs.csv", raw_rows, raw_fields)
     summary_rows = summarize(raw_rows)
     write_csv(results_dir / "summary.csv", summary_rows, summary_rows[0].keys())
     write_paper_table(results_dir / "paper_table.md", summary_rows)

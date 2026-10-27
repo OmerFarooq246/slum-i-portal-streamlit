@@ -98,20 +98,21 @@ Pegasus sweep retains its independent CPU and batch-size matrix.
 ## Pegasus CPU/batch sweep
 
 `pegasus_sweep.sbatch` runs both models across CPUs **2, 4, 6** and batch sizes
-**1-5**, with **8 GiB RAM**, **3 excluded warm-ups**, and **10 measured runs per
-ROI**. Each submission requires an explicit `streaming` or `in_memory` pipeline.
-Its 30 configurations run sequentially on one node, reusing one container with
-a fresh Python process per configuration. Run separate submissions for both
-pipelines to obtain 60 configurations in total. The local Compose batch setting
+**1-5**, with **16 GiB RAM**, **zero GPUs**, **3 excluded warm-ups**, and **10
+measured runs per ROI**. One submission runs all 60 configurations sequentially
+on one node. For each CPU/model/batch setting, `streaming` and `in_memory` run
+back-to-back with a fresh Python process per pipeline. This keeps both pipelines
+on the same CPU hardware and input staging. The local Compose batch setting
 does not control this sweep.
 
 ### Build once
 
-From the repository root on Pegasus, provide the model files and raster listed
-above, then start a compute-node build session:
+Keep the checkout under `/netscratch/$USER/<PROJECT>/`. From that repository
+root on Pegasus, provide the model files and raster listed above, then start a
+compute-node build session:
 
 ```bash
-srun --partition=batch --nodes=1 --ntasks=1 --cpus-per-task=4 --mem=8G \
+srun --partition=batch --nodes=1 --ntasks=1 --cpus-per-task=4 --mem=16G --gpus=0 \
   --time=04:00:00 --immediate=3600 \
   --container-image=/enroot/podman+enroot.sqsh \
   --container-mounts="/dev/fuse:/dev/fuse,/netscratch/$USER:/netscratch/$USER,$PWD:$PWD" \
@@ -119,11 +120,27 @@ srun --partition=batch --nodes=1 --ntasks=1 --cpus-per-task=4 --mem=8G \
 ```
 
 Inside the session, build and save the image from this checkout. This image
-supports both pipelines; use the same image for both submissions:
+supports both pipelines in the paired submission:
 
 ```bash
-podman build --format=docker -f benchmarks/Dockerfile -t slum-i-benchmark:pegasus-pipelines-v2 .
-enroot import -o /netscratch/$USER/benchmark-pipelines-v2.sqsh podman://slum-i-benchmark:pegasus-pipelines-v2
+# Keep Podman storage, build caches, and Enroot files inside this project.
+BUILD_ROOT="$PWD/.pegasus-build"
+mkdir -p "$BUILD_ROOT"/{storage,runroot,tmp,cache,enroot-data,enroot-cache}
+export TMPDIR="$BUILD_ROOT/tmp"
+export XDG_CACHE_HOME="$BUILD_ROOT/cache"
+export ENROOT_CACHE_PATH="$BUILD_ROOT/enroot-cache"
+export ENROOT_DATA_PATH="$BUILD_ROOT/enroot-data"
+export ENROOT_TEMP_PATH="$TMPDIR"
+export CONTAINERS_STORAGE_CONF="$BUILD_ROOT/storage.conf"
+cat > "$CONTAINERS_STORAGE_CONF" <<EOF
+[storage]
+driver = "vfs"
+graphroot = "$BUILD_ROOT/storage"
+runroot = "$BUILD_ROOT/runroot"
+EOF
+# vfs avoids overlay requirements but uses more scratch space.
+podman --tmpdir="$TMPDIR" build --format=docker -f benchmarks/Dockerfile -t slum-i-benchmark:pegasus-pipelines-v3 .
+enroot import -o "$PWD/benchmark-pipelines-v3.sqsh" podman://slum-i-benchmark:pegasus-pipelines-v3
 exit
 ```
 
@@ -131,45 +148,55 @@ The Dockerfile copies the benchmark and model code into `/app`. Updating the
 repository alone does not update an existing image. Rebuild after code or
 dependency changes, using a new tag and `.sqsh` filename for each build. Do not
 reuse the original `benchmark-v1.sqsh` for this protocol unless it was rebuilt
-from code supporting `--pipeline`. Build natively on Pegasus using the commands
-above rather than reusing the local Apple Silicon image.
+from code supporting `--pipeline` and `--work-dir`. Build natively on Pegasus
+using the commands above rather than reusing the local Apple Silicon image.
 
 ### Run the sweep
 
-Submit from the repository root. Select the pipeline explicitly:
+Submit once from the repository root, using the image built in the project:
 
 ```bash
-sbatch benchmarks/pegasus_sweep.sbatch /netscratch/$USER/benchmark-pipelines-v2.sqsh streaming
+sbatch benchmarks/pegasus_sweep.sbatch "$PWD/benchmark-pipelines-v3.sqsh"
 ```
 
-For the original in-memory graph baseline, submit the same image with:
+This runs both pipelines in one allocation; do not submit them separately for a
+paired comparison. The image must support `--work-dir`, so rebuild older images.
+The `.pegasus-build/` directory is excluded from Git and the image build context.
+Keep generated `.sqsh` files out of version control as well.
+
+Each submission returns one `JOB_ID`. Inspect it with one bounded status check:
 
 ```bash
-sbatch benchmarks/pegasus_sweep.sbatch /netscratch/$USER/benchmark-pipelines-v2.sqsh in_memory
-```
-
-Each submission returns a separate `JOB_ID`. Monitor the desired job with:
-
-```bash
-squeue -u "$USER"
-tail -f slurm-slum-i-sweep-JOB_ID.out
+squeue -j JOB_ID
+tail -n 50 slurm-slum-i-sweep-JOB_ID.out
 ```
 
 Results and logs are saved in `benchmarks/pegasus_results/JOB_ID/PIPELINE/`, with
 the pipeline also included in configuration names and the `status.csv` column.
 Check that file for completion (`exit_code=0`); failed configurations are
-recorded and the remaining sweep continues. `allocation.txt` records the
-selected pipeline, image hash, repository revision, and allocation details.
+recorded and the remaining sweep continues. A missing status row indicates an
+unfinished configuration. `allocation.txt` at the job root records both
+pipelines, the image hash, repository revision, and allocation details.
 
-Inputs and timed outputs are staged under node-local `/tmp`. The 8 GiB budget
-includes container and staging overhead; RAM is never increased automatically.
-Keep the image and inputs fixed across repeats, and copy results off scratch
-storage for safekeeping.
+Inputs and timed image outputs are staged under node-local `/tmp`. Metadata and
+`raw_runs.csv` are written directly to shared result storage. Each completed
+measurement is flushed and synced outside its timed region, so an OOM or timeout
+retains completed rows even when a configuration never finishes. Summary CSVs
+and paper tables are produced only after all measurements finish. Inspection
+artifacts are copied to shared storage after each configuration; artifacts from
+an interrupted step may remain incomplete or be lost. The runner's optional
+`--work-dir` separates timed artifacts from durable results; local runs retain
+the default `<results-dir>/artifacts` location.
 
-The job retains its 24-hour time limit. Actual runtime and whether every model
-and batch size fits in 8 GiB must be checked on Pegasus; local Mac measurements
-do not establish either. End-to-end comparisons also include the different
-output resolutions described in the streaming and baseline section above.
+The 16 GiB budget includes container and staging overhead; RAM is never increased
+automatically. Keep the image and inputs fixed across repeats, and copy results
+off scratch storage for safekeeping.
+
+The job retains its 24-hour time limit, now covering both pipelines. Actual
+runtime and whether every model and batch size fits in 16 GiB must be checked
+on Pegasus; local Mac measurements do not establish either. A cluster smoke
+test remains pending before the full sweep. End-to-end comparisons also include
+the different output resolutions described above.
 
 ## Sources of truth
 
@@ -179,4 +206,4 @@ output resolutions described in the streaming and baseline section above.
 - Container dependencies: `environment.yml`
 - Raster requirements: `data/README.md`
 - Shared portal and benchmark operations: `../ml/raster_inference.py` and `../ml/segmentation_core.py`
-- Pegasus CPU/batch sweep and fixed 8 GiB allocation: `pegasus_sweep.sbatch`
+- Pegasus paired CPU/batch sweep and fixed 16 GiB allocation: `pegasus_sweep.sbatch`
