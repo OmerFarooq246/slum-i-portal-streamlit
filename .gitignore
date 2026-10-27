@@ -1,4 +1,6 @@
 archive/
+.agents/
+.pegasus-build/
 models/
 tmp/
 public/outputs/
@@ -22,3 +24,4 @@ benchmarks/results_5_mruns/**/artifacts/
 benchmarks/results_5_mruns_stream/**/artifacts/
 benchmarks/results_10_mruns/**/artifacts/
 benchmarks/pegasus_results/**/artifacts/
+*.sqsh
