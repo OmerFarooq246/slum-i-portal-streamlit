@@ -11,7 +11,7 @@
 #SBATCH --output=slurm-%x-%j.out
 
 # Submit from the repository root:
-# sbatch benchmarks/pegasus_sweep.sbatch /netscratch/$USER/benchmark-pipelines-v3.sqsh
+# sbatch benchmarks/pegasus_sweep.sbatch "$PWD/benchmark-BUILD_JOB_ID.sqsh"
 set -euo pipefail
 
 if (( $# != 1 )); then
