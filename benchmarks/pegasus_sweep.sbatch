@@ -11,22 +11,23 @@
 #SBATCH --output=slurm-%x-%j.out
 
 # Submit from the repository root:
-# sbatch benchmarks/pegasus_sweep.sbatch "$PWD/benchmark-BUILD_JOB_ID.sqsh"
+# sbatch benchmarks/pegasus_sweep.sbatch ["/absolute/image.sqsh"]
 set -euo pipefail
 
-if (( $# != 1 )); then
-    echo "Usage: sbatch benchmarks/pegasus_sweep.sbatch /absolute/image.sqsh" >&2
+if (( $# > 1 )); then
+    echo "Usage: sbatch benchmarks/pegasus_sweep.sbatch [/absolute/image.sqsh]" >&2
     exit 2
 fi
-IMAGE="$1"
-
 : "${SLURM_JOB_ID:?Submit this script with sbatch}"
 : "${SLURM_SUBMIT_DIR:?Submit from the repository root}"
+REPO="$SLURM_SUBMIT_DIR"
+IMAGE="${1:-$REPO/benchmark-current.sqsh}"
 [[ "$IMAGE" = /* && -f "$IMAGE" ]] || {
     echo "Image must be an existing absolute .sqsh path: $IMAGE" >&2
     exit 2
 }
-REPO="$SLURM_SUBMIT_DIR"
+# Resolve the default once so later successful builds cannot change this sweep.
+IMAGE=$(realpath "$IMAGE")
 for input in models/enb5_seg_islamabad.h5 models/segformer_b5_islamabad.h5 \
     models/mit-b5/config.json models/mit-b5/preprocessor_config.json \
     benchmarks/data/raster_benchmark.tif; do
@@ -45,6 +46,7 @@ cp "$REPO/benchmarks/data/raster_benchmark.tif" "$WORK/benchmarks/data/"
 
 {
     printf 'pipelines=streaming,in_memory\n'
+    printf 'image=%s\n' "$IMAGE"
     date -u
     hostname
     lscpu

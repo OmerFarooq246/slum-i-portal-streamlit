@@ -128,7 +128,9 @@ tail -n 50 slurm-slum-i-build-BUILD_JOB_ID.out
 ```
 
 On success, the log prints the image path and sweep submission command. The
-image is saved as `benchmark-BUILD_JOB_ID.sqsh` in the repository root. Each job
+image is saved as `benchmark-BUILD_JOB_ID.sqsh` in the repository root, and
+`benchmark-current.sqsh` is updated atomically to point to that successful build.
+Older images remain available for reproducibility. Each job
 uses its own image tag and `.pegasus-build/BUILD_JOB_ID/` directory for Podman
 storage, caches, and Enroot files, all inside the project's scratch directory.
 The storage driver is `vfs`, which avoids overlay requirements but uses more
@@ -138,7 +140,8 @@ only the relevant job directory when it is no longer needed.
 The job stops if the build or export fails. It publishes the final image only
 after a successful, non-empty export and refuses to overwrite an existing image.
 A failed job can leave partial files under its build-storage directory. Submit
-a new build job after correcting the problem. The build does not launch the
+a new build job after correcting the problem. Failed builds leave the previous
+`benchmark-current.sqsh` link unchanged. The build does not launch the
 benchmark or perform the pending cluster smoke test automatically.
 
 The Dockerfile copies the benchmark and model code into `/app`. Updating the
@@ -150,8 +153,22 @@ using the commands above rather than reusing the local Apple Silicon image.
 
 ### Run the sweep
 
-After the cluster smoke test, submit once from the repository root. Replace
-`BUILD_JOB_ID` with the successful build job ID:
+Wait for the build to finish successfully and complete the cluster smoke test.
+Then submit manually from the repository root, without an image argument:
+
+```bash
+sbatch benchmarks/pegasus_sweep.sbatch
+```
+
+The sweep defaults to `benchmark-current.sqsh`. It resolves that link once at
+startup and records the resolved image path and hash in `allocation.txt`, so a
+later build does not switch the image during an active sweep. The default is
+selected when the job starts, not when it is submitted. A missing or broken
+image link fails preflight. If a build failed, the default still points to the
+previous successful build; inspect the build log before submitting the sweep.
+There is no automatic build dependency or benchmark submission.
+
+To reproduce a specific build, optionally provide its absolute image path:
 
 ```bash
 sbatch benchmarks/pegasus_sweep.sbatch "$PWD/benchmark-BUILD_JOB_ID.sqsh"

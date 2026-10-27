@@ -73,12 +73,18 @@ def test_build_publishes_image_after_export(
     build_environment: tuple[Path, dict[str, str]],
 ) -> None:
     repo, env = build_environment
+    current = repo / "benchmark-current.sqsh"
+    previous = repo / "benchmark-previous.sqsh"
+    previous.write_text("old image")
+    current.symlink_to(previous.name)
     result = subprocess.run(["bash", str(BUILD)], env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     image = repo / "benchmark-1234.sqsh"
     assert image.read_text() == "image"
     assert not (repo / ".pegasus-build/1234/image.sqsh").exists()
-    assert f'sbatch benchmarks/pegasus_sweep.sbatch "{image}"' in result.stdout
+    assert current.is_symlink() and current.resolve() == image
+    assert previous.read_text() == "old image"
+    assert "sbatch benchmarks/pegasus_sweep.sbatch\n" in result.stdout
 
 
 @pytest.mark.parametrize(("failure", "exit_code"), [("FAIL_BUILD", 7), ("FAIL_EXPORT", 8)])
@@ -87,9 +93,15 @@ def test_failed_build_does_not_publish_image(
 ) -> None:
     repo, env = build_environment
     env[failure] = "1"
+    previous = repo / "benchmark-previous.sqsh"
+    previous.write_text("old image")
+    current = repo / "benchmark-current.sqsh"
+    current.symlink_to(previous.name)
     result = subprocess.run(["bash", str(BUILD)], env=env, capture_output=True, text=True)
     assert result.returncode == exit_code, result.stdout + result.stderr
     assert not (repo / "benchmark-1234.sqsh").exists()
+    assert current.is_symlink() and current.resolve() == previous
+    assert current.read_text() == "old image"
     if failure == "FAIL_BUILD":
         assert not (repo / ".pegasus-build/1234/image.sqsh").exists()
     else:

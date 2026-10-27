@@ -24,8 +24,14 @@ for input in benchmarks/Dockerfile benchmarks/environment.yml .dockerignore; do
 done
 IMAGE="$REPO/benchmark-$SLURM_JOB_ID.sqsh"
 BUILD_ROOT="$REPO/.pegasus-build/$SLURM_JOB_ID"
+CURRENT="$REPO/benchmark-current.sqsh"
 [[ ! -e "$IMAGE" && ! -L "$IMAGE" ]] || {
     echo "Refusing to replace existing image: $IMAGE" >&2
+    exit 2
+}
+
+[[ ! -d "$CURRENT" && ( ! -e "$CURRENT" || -L "$CURRENT" ) ]] || {
+    echo "Default image path must be a symlink or unused path: $CURRENT" >&2
     exit 2
 }
 
@@ -62,6 +68,10 @@ BUILD
 [[ -s "$BUILD_ROOT/image.sqsh" ]] || { echo "Exported image is empty or missing" >&2; exit 1; }
 ln "$BUILD_ROOT/image.sqsh" "$IMAGE"
 rm "$BUILD_ROOT/image.sqsh"
+# Rename a temporary link atomically, leaving the previous default on failure.
+ln -s "$(basename "$IMAGE")" "$BUILD_ROOT/current.sqsh"
+mv -f "$BUILD_ROOT/current.sqsh" "$CURRENT"
 echo "Build finished. Image: $IMAGE"
+echo "Default image: $CURRENT"
 printf 'After the cluster smoke test, submit from the repository root:\n'
-printf 'sbatch benchmarks/pegasus_sweep.sbatch "%s"\n' "$IMAGE"
+printf 'sbatch benchmarks/pegasus_sweep.sbatch\n'
