@@ -107,56 +107,71 @@ does not control this sweep.
 
 ### Build once
 
-Keep the checkout under `/netscratch/$USER/<PROJECT>/`. From that repository
-root on Pegasus, provide the model files and raster listed above, then start a
-compute-node build session:
+Keep the checkout under `/netscratch/$USER/<PROJECT>/`. From the repository
+root on Pegasus, submit the automated CPU-only build:
 
 ```bash
-srun --partition=batch --nodes=1 --ntasks=1 --cpus-per-task=4 --mem=16G --gpus=0 \
-  --time=04:00:00 --immediate=3600 \
-  --container-image=/enroot/podman+enroot.sqsh \
-  --container-mounts="/dev/fuse:/dev/fuse,/netscratch/$USER:/netscratch/$USER,$PWD:$PWD" \
-  --container-workdir="$PWD" --pty bash
+sbatch benchmarks/pegasus_build.sbatch
 ```
 
-Inside the session, build and save the image from this checkout. This image
-supports both pipelines in the paired submission:
+Slurm queues the build and runs it automatically on a compute node when resources
+are available. It requests four CPUs, 16 GiB RAM, zero GPUs, and four hours. You
+can disconnect after submission; an interactive shell is unnecessary. The job
+uses `/enroot/podman+enroot.sqsh` to run Podman and export the benchmark image.
+Model checkpoints and the raster are needed for the sweep, but not for building.
+
+The submission returns a `BUILD_JOB_ID`. Inspect it with bounded checks:
 
 ```bash
-# Keep Podman storage, build caches, and Enroot files inside this project.
-BUILD_ROOT="$PWD/.pegasus-build"
-mkdir -p "$BUILD_ROOT"/{storage,runroot,tmp,cache,enroot-data,enroot-cache}
-export TMPDIR="$BUILD_ROOT/tmp"
-export XDG_CACHE_HOME="$BUILD_ROOT/cache"
-export ENROOT_CACHE_PATH="$BUILD_ROOT/enroot-cache"
-export ENROOT_DATA_PATH="$BUILD_ROOT/enroot-data"
-export ENROOT_TEMP_PATH="$TMPDIR"
-export CONTAINERS_STORAGE_CONF="$BUILD_ROOT/storage.conf"
-cat > "$CONTAINERS_STORAGE_CONF" <<EOF
-[storage]
-driver = "vfs"
-graphroot = "$BUILD_ROOT/storage"
-runroot = "$BUILD_ROOT/runroot"
-EOF
-# vfs avoids overlay requirements but uses more scratch space.
-podman --tmpdir="$TMPDIR" build --format=docker -f benchmarks/Dockerfile -t slum-i-benchmark:pegasus-pipelines-v3 .
-enroot import -o "$PWD/benchmark-pipelines-v3.sqsh" podman://slum-i-benchmark:pegasus-pipelines-v3
-exit
+squeue -j BUILD_JOB_ID
+tail -n 50 slurm-slum-i-build-BUILD_JOB_ID.out
 ```
+
+On success, the log prints the image path and sweep submission command. The
+image is saved as `benchmark-BUILD_JOB_ID.sqsh` in the repository root, and
+`benchmark-current.sqsh` is updated atomically to point to that successful build.
+Older images remain available for reproducibility. Each job
+uses its own image tag and `.pegasus-build/BUILD_JOB_ID/` directory for Podman
+storage, caches, and Enroot files, all inside the project's scratch directory.
+The storage driver is `vfs`, which avoids overlay requirements but uses more
+scratch space. Build storage remains after completion for inspection; remove
+only the relevant job directory when it is no longer needed.
+
+The job stops if the build or export fails. It publishes the final image only
+after a successful, non-empty export and refuses to overwrite an existing image.
+A failed job can leave partial files under its build-storage directory. Submit
+a new build job after correcting the problem. Failed builds leave the previous
+`benchmark-current.sqsh` link unchanged. The build does not launch the
+benchmark or perform the pending cluster smoke test automatically.
 
 The Dockerfile copies the benchmark and model code into `/app`. Updating the
 repository alone does not update an existing image. Rebuild after code or
-dependency changes, using a new tag and `.sqsh` filename for each build. Do not
+dependency changes; each build job uses a new tag and `.sqsh` filename. Do not
 reuse the original `benchmark-v1.sqsh` for this protocol unless it was rebuilt
 from code supporting `--pipeline` and `--work-dir`. Build natively on Pegasus
 using the commands above rather than reusing the local Apple Silicon image.
 
 ### Run the sweep
 
-Submit once from the repository root, using the image built in the project:
+Wait for the build to finish successfully and complete the cluster smoke test.
+Then submit manually from the repository root, without an image argument:
 
 ```bash
-sbatch benchmarks/pegasus_sweep.sbatch "$PWD/benchmark-pipelines-v3.sqsh"
+sbatch benchmarks/pegasus_sweep.sbatch
+```
+
+The sweep defaults to `benchmark-current.sqsh`. It resolves that link once at
+startup and records the resolved image path and hash in `allocation.txt`, so a
+later build does not switch the image during an active sweep. The default is
+selected when the job starts, not when it is submitted. A missing or broken
+image link fails preflight. If a build failed, the default still points to the
+previous successful build; inspect the build log before submitting the sweep.
+There is no automatic build dependency or benchmark submission.
+
+To reproduce a specific build, optionally provide its absolute image path:
+
+```bash
+sbatch benchmarks/pegasus_sweep.sbatch "$PWD/benchmark-BUILD_JOB_ID.sqsh"
 ```
 
 This runs both pipelines in one allocation; do not submit them separately for a
@@ -206,4 +221,5 @@ the different output resolutions described above.
 - Container dependencies: `environment.yml`
 - Raster requirements: `data/README.md`
 - Shared portal and benchmark operations: `../ml/raster_inference.py` and `../ml/segmentation_core.py`
+- Automated Pegasus image build: `pegasus_build.sbatch`
 - Pegasus paired CPU/batch sweep and fixed 16 GiB allocation: `pegasus_sweep.sbatch`

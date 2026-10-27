@@ -41,7 +41,14 @@ def sweep_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         commands / "srun",
         f"#!{sys.executable}\n"
         "import os, subprocess, sys\n"
+        "from pathlib import Path\n"
         "args = sys.argv[1:]\n"
+        "if os.environ.get('EXPECTED_IMAGE'):\n"
+        "    assert '--container-image=' + os.environ['EXPECTED_IMAGE'] in args\n"
+        "if os.environ.get('SWITCH_CURRENT_TO'):\n"
+        "    current = Path(os.environ['SLURM_SUBMIT_DIR']) / 'benchmark-current.sqsh'\n"
+        "    current.unlink()\n"
+        "    current.symlink_to(os.environ['SWITCH_CURRENT_TO'])\n"
         "mount = next(a.split('=', 1)[1] for a in args "
         "if a.startswith('--container-mounts='))\n"
         "work, durable = mount.split(',')\n"
@@ -92,14 +99,25 @@ def sweep_environment(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     return image, env
 
 
+@pytest.mark.parametrize("use_default", [False, True])
 def test_sweep_pairs_pipelines_and_preserves_matrix(
-    sweep_environment: tuple[Path, dict[str, str]],
+    sweep_environment: tuple[Path, dict[str, str]], use_default: bool
 ) -> None:
     image, env = sweep_environment
+    arguments = [] if use_default else [str(image)]
+    env["EXPECTED_IMAGE"] = str(image.resolve())
+    if use_default:
+        repo = Path(env["SLURM_SUBMIT_DIR"])
+        (repo / "benchmark-current.sqsh").symlink_to(image)
+        replacement = repo / "benchmark-new.sqsh"
+        replacement.touch()
+        env["SWITCH_CURRENT_TO"] = str(replacement)
     result = subprocess.run(
-        ["bash", str(SWEEP), str(image)], env=env, capture_output=True, text=True
+        ["bash", str(SWEEP), *arguments], env=env, capture_output=True, text=True
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    allocation = Path(env["SLURM_SUBMIT_DIR"]) / "benchmarks/pegasus_results/4242/allocation.txt"
+    assert f"image={image.resolve()}" in allocation.read_text()
     starts = [
         line.split()[1] for line in result.stdout.splitlines() if line.startswith("Starting ")
     ]
@@ -153,8 +171,8 @@ def test_sweep_continues_after_failed_configuration(
     assert (root / "enb5_seg_islamabad_streaming_cpu2_ram16_b1/metadata.json").is_file()
 
 
-@pytest.mark.parametrize("image_args", [[], ["image", "streaming"]])
-def test_sweep_requires_only_image_argument(
+@pytest.mark.parametrize("image_args", [["image", "streaming"]])
+def test_sweep_rejects_extra_arguments(
     sweep_environment: tuple[Path, dict[str, str]], image_args: list[str]
 ) -> None:
     _, env = sweep_environment
@@ -164,3 +182,17 @@ def test_sweep_requires_only_image_argument(
     assert result.returncode == 2
     assert "Usage:" in result.stderr
     assert not (Path(env["SLURM_SUBMIT_DIR"]) / "benchmarks/pegasus_results").exists()
+
+
+@pytest.mark.parametrize("broken_link", [False, True])
+def test_sweep_requires_existing_default_image(
+    sweep_environment: tuple[Path, dict[str, str]], broken_link: bool
+) -> None:
+    _, env = sweep_environment
+    repo = Path(env["SLURM_SUBMIT_DIR"])
+    if broken_link:
+        (repo / "benchmark-current.sqsh").symlink_to(repo / "missing.sqsh")
+    result = subprocess.run(["bash", str(SWEEP)], env=env, capture_output=True, text=True)
+    assert result.returncode == 2
+    assert "Image must be an existing absolute" in result.stderr
+    assert not (repo / "benchmarks/pegasus_results").exists()
