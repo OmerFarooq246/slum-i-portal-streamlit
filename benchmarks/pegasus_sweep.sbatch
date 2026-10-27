@@ -7,7 +7,7 @@
 #SBATCH --hint=nomultithread
 #SBATCH --mem=16G
 #SBATCH --gpus=0
-#SBATCH --time=1-00:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --output=slurm-%x-%j.out
 
 # Submit from the repository root:
@@ -67,7 +67,7 @@ for cpus in 2 4 6; do
             # Pair both pipelines on the same CPU allocation and input staging.
             for PIPELINE in streaming in_memory; do
                 name="${model}_${PIPELINE}_cpu${cpus}_ram16_b${batch}"
-                echo "Starting $name: 10 measurements per ROI"
+                echo "Starting $name: 5 measurements per ROI"
                 rc=0
                 srun --nodes=1 --ntasks=1 --exact --cpus-per-task="$cpus" \
                     --hint=nomultithread --cpu-bind=verbose,threads --mem=16G --gpus=0 \
@@ -91,7 +91,7 @@ for cpus in 2 4 6; do
                         python /app/benchmarks/system_benchmark.py \
                             --model "$model" --cpu-limit "$cpus" --batch-size "$batch" \
                             --pipeline "$pipeline" \
-                            --warmup-runs 3 --measured-runs 10 --crop-x 0 --crop-y 0 \
+                            --warmup-runs 3 --measured-runs 5 --crop-x 0 --crop-y 0 \
                             --results-dir "$out" --work-dir "artifacts/$name"
                     ' sweep "$cpus" "$batch" "$model" "$name" "$PIPELINE" \
                     > "$RESULTS/$PIPELINE/$name.log" 2>&1 || rc=$?
@@ -102,7 +102,7 @@ for cpus in 2 4 6; do
                     cp -r "$WORK/artifacts/$name" "$RESULTS/$PIPELINE/$name/artifacts"
                     rm -rf "$WORK/artifacts/$name"
                 fi
-                printf '%s,%s,%s,16,%s,10,%s\n' "$model" "$PIPELINE" "$cpus" "$batch" "$rc" >> "$RESULTS/$PIPELINE/status.csv"
+                printf '%s,%s,%s,16,%s,5,%s\n' "$model" "$PIPELINE" "$cpus" "$batch" "$rc" >> "$RESULTS/$PIPELINE/status.csv"
                 if (( rc != 0 )); then
                     echo "FAILED $name (exit $rc); see $RESULTS/$PIPELINE/$name.log" >&2
                     failed=1

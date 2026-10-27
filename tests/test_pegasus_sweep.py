@@ -131,7 +131,7 @@ def test_sweep_pairs_pipelines_and_preserves_matrix(
             assert metadata["cpu_limit"] == row["cpus"]
             assert metadata["batch_size"] == row["batch_size"]
             assert metadata["warmup_runs"] == "3"
-            assert metadata["measured_runs"] == row["measured_runs"] == "10"
+            assert metadata["measured_runs"] == row["measured_runs"] == "5"
             assert (root / f"{name}.log").is_file()
 
 

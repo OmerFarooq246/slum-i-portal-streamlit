@@ -79,7 +79,7 @@ Transformers 4.57.6 uses the legacy TensorFlow Keras API for this model, so the 
 
 Both Compose configurations supply their model and runtime arguments explicitly. Do not run the ARM64 protocol through AMD64 emulation.
 
-The runner defaults to three excluded warm-up runs and five measured runs per ROI, and accepts at least one warm-up and five measurements. The local ENB5 Compose configuration explicitly uses one warm-up and five measurements to match the historical baseline; the Pegasus sweep explicitly uses three warm-ups and ten measurements. Summary CSV columns use `_mean` and `_stddev`, and paper tables report arithmetic mean ± sample standard deviation across the measured runs. Historical result sets retain their original measurements and warm-up counts; their summaries can be recalculated from the saved raw runs without rerunning inference.
+The runner defaults to three excluded warm-up runs and five measured runs per ROI, and accepts at least one warm-up and five measurements. The local ENB5 Compose configuration explicitly uses one warm-up and five measurements to match the historical baseline; the Pegasus sweep explicitly uses three warm-ups and five measurements. Summary CSV columns use `_mean` and `_stddev`, and paper tables report arithmetic mean ± sample standard deviation across the measured runs. Historical result sets retain their original measurements and warm-up counts; their summaries can be recalculated from the saved raw runs without rerunning inference.
 
 Ten-run results are stored in `results_10_mruns/`. Five-run results are preserved in `results_5_mruns/` with their original raw measurements and mean-based summaries. The `enb5_seg_islamabad_cpu2_b1_new` and `enb5_seg_islamabad_cpu2_b5_new` directories record graph-inference runs for comparison with the corresponding `enb5_seg_islamabad_b1` and `enb5_seg_islamabad_b5` baselines. Their metadata matches except for CPU affinity (six available CPUs versus four previously, with the same two-CPU quota), which limits attribution of the observed gains solely to graph execution. Generated PNG artifacts are excluded from Git.
 
@@ -98,7 +98,7 @@ Pegasus sweep retains its independent CPU and batch-size matrix.
 ## Pegasus CPU/batch sweep
 
 `pegasus_sweep.sbatch` runs both models across CPUs **2, 4, 6** and batch sizes
-**1-5**, with **16 GiB RAM**, **zero GPUs**, **3 excluded warm-ups**, and **10
+**1-5**, with **16 GiB RAM**, **zero GPUs**, **3 excluded warm-ups**, and **5
 measured runs per ROI**. One submission runs all 60 configurations sequentially
 on one node. For each CPU/model/batch setting, `streaming` and `in_memory` run
 back-to-back with a fresh Python process per pipeline. This keeps both pipelines
@@ -192,7 +192,7 @@ The 16 GiB budget includes container and staging overhead; RAM is never increase
 automatically. Keep the image and inputs fixed across repeats, and copy results
 off scratch storage for safekeeping.
 
-The job retains its 24-hour time limit, now covering both pipelines. Actual
+The job has a two-day (48-hour) time limit covering both pipelines. Actual
 runtime and whether every model and batch size fits in 16 GiB must be checked
 on Pegasus; local Mac measurements do not establish either. A cluster smoke
 test remains pending before the full sweep. End-to-end comparisons also include
