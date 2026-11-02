@@ -1,0 +1,31 @@
+srun: jobinfo: version v1.0.0
+cpu-bind=MASK - kersey, task  0  0 [1152732]: mask 0x3c000 set
+Job 3673568: Running on node(s) kersey
+Job 3673568: Started at 2026-10-29 20:12:29+0100
+Monitor this job here: http://monitoring.pegasus.kl.dfki.de/d/slurm-job-details/job-details?var-jobid=3673568&from=1793301149000
+2026-10-29 20:12:33.253486: E external/local_xla/xla/stream_executor/cuda/cuda_platform.cc:51] failed call to cuInit: INTERNAL: CUDA error: Failed call to cuInit: UNKNOWN ERROR (303)
+Warm-up 1/3: small (4 tiles)
+Warm-up 2/3: small (4 tiles)
+Warm-up 3/3: small (4 tiles)
+Measured run 1/5: small
+Measured run 2/5: small
+Measured run 3/5: small
+Measured run 4/5: small
+Measured run 5/5: small
+Warm-up 1/3: medium (16 tiles)
+Warm-up 2/3: medium (16 tiles)
+Warm-up 3/3: medium (16 tiles)
+Measured run 1/5: medium
+Measured run 2/5: medium
+Measured run 3/5: medium
+Measured run 4/5: medium
+Measured run 5/5: medium
+Warm-up 1/3: large (36 tiles)
+Warm-up 2/3: large (36 tiles)
+Warm-up 3/3: large (36 tiles)
+Measured run 1/5: large
+Measured run 2/5: large
+Measured run 3/5: large
+Measured run 4/5: large
+Measured run 5/5: large
+Results written to benchmarks/pegasus_results/streaming/enb5_seg_islamabad_streaming_cpu4_ram16_b3

@@ -1,0 +1,37 @@
+srun: jobinfo: version v1.0.0
+cpu-bind=MASK - kersey, task  0  0 [1373832]: mask 0xc03c000 set
+Job 3673568: Running on node(s) kersey
+Job 3673568: Started at 2026-10-29 23:28:03+0100
+Monitor this job here: http://monitoring.pegasus.kl.dfki.de/d/slurm-job-details/job-details?var-jobid=3673568&from=1793312883000
+2026-10-29 23:28:07.824536: E external/local_xla/xla/stream_executor/cuda/cuda_platform.cc:51] failed call to cuInit: INTERNAL: CUDA error: Failed call to cuInit: UNKNOWN ERROR (303)
+TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We recommend migrating to PyTorch classes or pinning your version of Transformers.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793312890.430574 1374083 device_compiler.h:196] Compiled cluster using XLA!  This line is logged at most once for the lifetime of the process.
+WARNING:tensorflow:5 out of the last 5 calls to <function Conv._jit_compiled_convolution_op at 0x79692b9d1940> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+WARNING:tensorflow:6 out of the last 6 calls to <function Conv._jit_compiled_convolution_op at 0x79692b9d1a80> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+Warm-up 1/3: small (4 tiles)
+TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We recommend migrating to PyTorch classes or pinning your version of Transformers.
+Warm-up 2/3: small (4 tiles)
+Warm-up 3/3: small (4 tiles)
+Measured run 1/5: small
+Measured run 2/5: small
+Measured run 3/5: small
+Measured run 4/5: small
+Measured run 5/5: small
+Warm-up 1/3: medium (16 tiles)
+Warm-up 2/3: medium (16 tiles)
+Warm-up 3/3: medium (16 tiles)
+Measured run 1/5: medium
+Measured run 2/5: medium
+Measured run 3/5: medium
+Measured run 4/5: medium
+Measured run 5/5: medium
+Warm-up 1/3: large (36 tiles)
+Warm-up 2/3: large (36 tiles)
+Warm-up 3/3: large (36 tiles)
+Measured run 1/5: large
+Measured run 2/5: large
+Measured run 3/5: large
+Measured run 4/5: large
+Measured run 5/5: large
+Results written to benchmarks/pegasus_results/in_memory/segformer_b5_islamabad_in_memory_cpu6_ram16_b1
