@@ -1,0 +1,84 @@
+pipelines=streaming,in_memory
+image=/netscratch/mukhtar/slum-i-portal-streamlit/benchmark-3669562.sqsh
+Thu Oct 29 08:46:04 UTC 2026
+kersey
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           46 bits physical, 48 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  72
+On-line CPU(s) list:                     0-71
+Vendor ID:                               GenuineIntel
+Model name:                              Intel(R) Xeon(R) Gold 6254 CPU @ 3.10GHz
+CPU family:                              6
+Model:                                   85
+Thread(s) per core:                      2
+Core(s) per socket:                      18
+Socket(s):                               2
+Stepping:                                7
+CPU(s) scaling MHz:                      98%
+CPU max MHz:                             4000.0000
+CPU min MHz:                             1200.0000
+BogoMIPS:                                6200.00
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb cat_l3 cdp_l3 intel_ppin ssbd mba ibrs ibpb stibp ibrs_enhanced fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm mpx rdt_a avx512f avx512dq rdseed adx smap clflushopt clwb intel_pt avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local dtherm ida arat pln pts pku ospke avx512_vnni md_clear flush_l1d arch_capabilities ibpb_exit_to_user
+L1d cache:                               1.1 MiB (36 instances)
+L1i cache:                               1.1 MiB (36 instances)
+L2 cache:                                36 MiB (36 instances)
+L3 cache:                                49.5 MiB (2 instances)
+NUMA node(s):                            2
+NUMA node0 CPU(s):                       0-17,36-53
+NUMA node1 CPU(s):                       18-35,54-71
+Vulnerability Gather data sampling:      Mitigation; Microcode
+Vulnerability Indirect target selection: Mitigation; Aligned branch/return thunks
+Vulnerability Itlb multihit:             KVM: Mitigation: VMX unsupported
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Mitigation; Clear CPU buffers; SMT vulnerable
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Mitigation; Enhanced IBRS
+Vulnerability Spec rstack overflow:      Not affected
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI SW loop, KVM SW loop
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Mitigation; TSX disabled
+Vulnerability Vmscape:                   Mitigation; IBPB before exit to userspace
+Filesystem     Type 1K-blocks    Used Available Use% Mounted on
+/dev/md0       ext4 131395596 9044240 115630692   8% /
+JobId=3673568 JobName=slum-i-sweep
+   UserId=mukhtar(4630) GroupId=sds(7050) MCS_label=N/A
+   Priority=39826 Nice=0 Account=sds-external QOS=normal
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=1 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:00:05 TimeLimit=2-00:00:00 TimeMin=N/A
+   SubmitTime=2026-10-28T15:36:18 EligibleTime=2026-10-28T15:36:18
+   AccrueTime=2026-10-28T15:36:18
+   StartTime=2026-10-29T09:45:59 EndTime=2026-10-31T09:45:59 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-29T09:45:59 Scheduler=Main
+   Partition=batch AllocNode:Sid=virt-3324:2173688
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=kersey
+   BatchHost=kersey
+   NumNodes=1 NumCPUs=12 NumTasks=1 CPUs/Task=6 ReqB:S:C:T=0:0:*:1
+   ReqTRES=cpu=6,mem=16G,node=1,billing=6
+   AllocTRES=cpu=12,mem=16G,node=1,billing=12
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:1 CoreSpec=*
+   MinCPUsNode=6 MinMemoryNode=16G MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=OK Contiguous=0 Licenses=(null) LicensesAlloc=(null) Network=(null)
+   Command=/netscratch/mukhtar/slum-i-portal-streamlit/benchmarks/pegasus_sweep.sbatch
+   SubmitLine=sbatch benchmarks/pegasus_sweep.sbatch
+   WorkDir=/netscratch/mukhtar/slum-i-portal-streamlit
+   StdErr=
+   StdIn=/dev/null
+   StdOut=/netscratch/mukhtar/slum-i-portal-streamlit/slurm-slum-i-sweep-3673568.out
+   TresPerJob=gres/gpu:0
+   TresPerTask=cpu=6
+
+8b4d8217a1585b21efb9f2e511edc822aebdfe8a7a09a321696803907faf9ce2  /netscratch/mukhtar/slum-i-portal-streamlit/benchmark-3669562.sqsh
+0d9ccbd23fc37d52163ff42efc1bd0ac7820ea12
+?? benchmarks/pegasus_results/3673568/
+?? slurm-slum-i-build-3669562.out
+?? slurm-slum-i-sweep-3673568.out
